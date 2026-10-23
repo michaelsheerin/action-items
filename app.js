@@ -1,6 +1,7 @@
 import {ACCOUNTS, OWNER, STATUSES, FIELDS, localDay, weekBounds, sectionFor, compareTasks, matches, categoryOptions, safeURL, newTask, parseImport, csvExport} from './core.js?v=4';
 import {openStore} from './store.js?v=4';
-import {installColumnSizing} from './columns.js?v=5';
+import {installColumnSizing} from './columns.js?v=6';
+import {inlineCompletion, reconcileChildren, installGridKeys} from './interactions.js?v=6';
 
 const archived = document.body.dataset.view === 'archive';
 const app = document.querySelector('#app');
@@ -8,35 +9,42 @@ let store;
 let tasks = new Map();
 let pending = 0;
 let saveFailed = false;
-let archiveLimit = 150;
+let archiveLimit = 50;
 let toastTimer;
 let renderTimer;
 let retryEdits = new Map();
 let currentDay = localDay();
+let layoutPending = false;
+let syncPending = false;
 const drafts = new Map();
+const rowViews = new Map();
+const accountViews = new Map();
+const categoryCache = new Map();
 const expandedRemaining = new Set();
+const collapsedSearch = new Set();
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel('action-items-updates') : null;
 const query = {text: '', account: '', status: ''};
 const labels = {account: 'Account', category: 'Category', title: 'Action item', due: 'Due date', status: 'Status', done: 'Done', notes: 'Notes', ticket: 'Ticket ID / link', owner: 'Owner'};
 
 app.innerHTML = `
   <header class="topbar">
-    <a class="brand" href="./" aria-label="Action Items home"><img src="./icon.svg" alt="" width="30" height="30"><span>Action Items</span></a>
+    <a class="brand" href="./" aria-label="Action Items home"><span class="brand-mark" aria-hidden="true">✓</span><span>Action Items<small>Michael Sheerin’s workspace</small></span></a>
     <nav aria-label="Pages"><a href="./" ${!archived ? 'aria-current="page"' : ''}>Action items</a><a href="./archive.html" ${archived ? 'aria-current="page"' : ''}>Archive <span id="archive-count" class="nav-count">0</span></a></nav>
-    <div class="topbar-right"><span id="save-state" class="save-state" role="status" aria-live="polite">Loading…</span><button id="data-button" class="button" aria-haspopup="dialog">Data <span aria-hidden="true">⌄</span></button><span class="avatar" title="Michael Sheerin">MS</span></div>
+    <div class="topbar-right"><span id="save-state" class="save-state" role="status" aria-live="polite">Loading…</span><button id="keyboard-button" class="button quiet" aria-haspopup="dialog">Shortcuts <kbd>?</kbd></button><button id="data-button" class="button" aria-haspopup="dialog">Data & backup</button><span class="avatar" title="Michael Sheerin">MS</span></div>
   </header>
   <main>
-    <div class="page-heading"><div><div class="eyebrow">WORKSPACE</div><h1>${archived ? 'Completed actions' : 'Action items'}</h1><p>${archived ? 'Your completed work. Uncheck any row to restore.' : 'Edit any field. Changes save as you type.'}</p></div><div id="summary" class="summary"></div></div>
+    <div class="page-heading"><div><div class="eyebrow">YOUR WORKSPACE</div><h1>${archived ? 'Completed actions' : 'Action items'}</h1><p>${archived ? 'Completed work, ready to restore.' : 'Your next steps, organized by account. Every field saves as you type.'}</p></div><div class="heading-right"><div id="summary" class="summary"></div>${!archived ? '<button id="new-action" class="button primary">+ New action <kbd>Alt N</kbd></button>' : ''}</div></div>
     <div id="error-banner" class="error-banner" role="alert" hidden><span id="error-text"></span><button id="retry-save" class="button" hidden>Retry save</button><button id="emergency-export" class="button">Download backup</button></div>
     <section class="work-surface" aria-label="Action tracker">
       <div class="toolbar"><div class="search-box"><svg aria-hidden="true" viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><input id="search" type="search" placeholder="Search actions, categories, tickets…" aria-label="Search actions"><kbd>/</kbd></div><div class="filters"><select id="account-filter" aria-label="Filter by account"><option value="">All accounts</option></select><select id="status-filter" aria-label="Filter by status"><option value="">All statuses</option>${STATUSES.map(status => `<option>${status}</option>`).join('')}</select><button id="clear-filters" class="text-button" hidden>Clear filters</button></div><span id="visible-count" class="visible-count"></span></div>
       <div id="empty-state" class="empty-state" hidden><img src="./icon.svg" alt="" width="36" height="36"><div><strong>${archived ? 'Your completed work will appear here' : 'Start with your next action'}</strong><p>${archived ? 'Complete a task on the Action items page to move the record here.' : 'Type in a blank row below, or import your workbook records.'}</p></div>${!archived ? '<button id="empty-import" class="button">Import records</button>' : ''}</div>
       <div class="table-wrap" tabindex="0" aria-label="Editable action table"><table id="actions-table"><caption class="sr-only">${archived ? 'Completed action items, grouped by account' : 'All action items, grouped by account, then This Week and Remaining Items'}</caption><colgroup>${FIELDS.map(field => `<col class="col-${field}">`).join('')}</colgroup><thead><tr>${FIELDS.map(field => `<th scope="col" data-column="${field}" ${field === 'done' ? 'class="done-heading"' : ''}>${labels[field]}</th>`).join('')}</tr></thead></table></div>
-      <div class="table-footer"><span>${archived ? 'Uncheck Done to return an action to your list.' : 'Blank rows are ready for typing. Tab moves between fields.'} Drag a column edge to resize.</span><button id="reset-widths" class="text-button">Reset widths</button><button id="show-more" class="text-button" hidden>Show more completed actions</button><span class="local-label"><span class="local-dot"></span>Stored in this browser</span></div>
+      <div class="table-footer"><span>${archived ? 'Uncheck Done to restore.' : '<kbd>Tab</kbd> Next field <span class="footer-divider">·</span> <kbd>Ctrl Alt ↑ / ↓</kbd> Same column <span class="footer-divider">·</span> <kbd>Ctrl Enter</kbd> New action'}</span><button id="reset-widths" class="text-button">Reset column widths</button><button id="show-more" class="text-button" hidden>Show more completed actions</button><span class="local-label"><span class="local-dot"></span>Saved in this browser</span></div>
     </section>
     <div class="workspace-footer"><span>One table. All accounts.</span><span>Week starts Monday · <span id="week-label"></span></span></div>
   </main>
-  <div id="category-lists"></div>
+  <div id="completion-hint" class="sr-only" role="status" aria-live="polite"></div>
+  <dialog id="keyboard-dialog"><div class="dialog-heading"><div><div class="eyebrow">WORK FASTER</div><h2>Keyboard shortcuts</h2></div><button id="close-keyboard" class="icon-button" aria-label="Close keyboard shortcuts">×</button></div><dl class="shortcut-list"><div><dt>Next / previous field</dt><dd><kbd>Tab</kbd> / <kbd>Shift Tab</kbd></dd></div><div><dt>Move up / down in a column</dt><dd><kbd>Ctrl Alt ↑</kbd> / <kbd>Ctrl Alt ↓</kbd></dd></div><div><dt>Move left / right between fields</dt><dd><kbd>Alt ←</kbd> / <kbd>Alt →</kbd></dd></div><div><dt>New action in this section</dt><dd><kbd>Ctrl Enter</kbd> or <kbd>⌘ Enter</kbd></dd></div><div><dt>New action</dt><dd><kbd>Alt N</kbd></dd></div><div><dt>Search</dt><dd><kbd>Ctrl K</kbd> or <kbd>/</kbd></dd></div><div><dt>Start editing search results</dt><dd><kbd>Enter</kbd> in search</dd></div><div><dt>Accept inline completion</dt><dd><kbd>Tab</kbd> or <kbd>→</kbd></dd></div><div><dt>Keep typed text / leave a field</dt><dd><kbd>Esc</kbd></dd></div><div><dt>Add an Action Item line</dt><dd><kbd>Enter</kbd></dd></div><div><dt>Add a Notes line</dt><dd><kbd>Shift Enter</kbd></dd></div></dl><p class="small-print">Dropdown arrows and calendar keys keep their native browser behavior. Focus Remaining Items and press Enter or Space to expand.</p></dialog>
   <div id="toast" class="toast" role="status" hidden><span id="toast-text"></span><button id="toast-undo" hidden>Undo</button></div>
   <dialog id="data-dialog"><div class="dialog-heading"><h2>Your records</h2><button id="close-data" class="icon-button" aria-label="Close data settings">×</button></div><p class="dialog-intro">Changes save on this device. Download a backup to move your records to another browser.</p><div class="data-action"><div><strong>Back up all records</strong><p>Includes active actions, completed actions, and source references.</p></div><button id="export-json" class="button primary">Download JSON</button></div><div class="data-action"><div><strong>Export a spreadsheet</strong><p>Download ${archived ? 'completed' : 'active'} actions as CSV.</p></div><button id="export-csv" class="button">Download CSV</button></div><div class="data-action"><div><strong>Import records</strong><p>Import an Action Items JSON backup or migration file.</p></div><button id="choose-import" class="button">Choose file</button></div><label class="overwrite-option"><input id="overwrite-import" type="checkbox"> Update matching records from the file</label><p class="small-print">Existing records stay unchanged unless this option is selected. Imported rows merge by record ID.</p><input id="import-file" type="file" accept=".json,application/json" hidden><div id="import-result" class="import-result" role="status"></div></dialog>
 `;
@@ -77,30 +85,19 @@ async function saveTask(task, patch) {
     saveFailed = true;
     showError(`Your latest edit is still on screen but has not saved. ${error.message || 'Browser storage is unavailable.'} Retry or download a backup.`);
     return false;
-  } finally { pending--; setSaveState(); }
+  } finally { pending--; setSaveState(); if (!pending && syncPending && !editingCell()) void syncFromStore(); }
 }
 
-function currentFocus() {
-  const focused = document.activeElement;
-  const row = focused?.closest('tr[data-id]');
-  return row && focused.dataset.field ? {id: row.dataset.id, field: focused.dataset.field, start: focused.selectionStart, end: focused.selectionEnd} : null;
-}
-function restoreFocus(focus) {
-  if (!focus) return;
-  const control = [...el('actions-table').querySelectorAll('[data-field]')].find(c => c.dataset.field === focus.field && c.closest('tr').dataset.id === focus.id);
-  if (control) {
-    control.focus({preventScroll: true});
-    if (['TEXTAREA', 'INPUT'].includes(control.tagName) && ['text', 'search', 'textarea'].includes(control.type)) {
-      try { control.setSelectionRange(focus.start, focus.end); } catch {}
-    }
-  }
+function editingCell() { return Boolean(document.activeElement?.closest('#actions-table [data-field]')); }
+function mergeTasks(fresh) {
+  tasks = new Map(fresh.map(task => {
+    const existing = tasks.get(task.id);
+    return [task.id, existing ? Object.assign(existing, task) : task];
+  }));
 }
 function refreshCategories() {
-  const host = el('category-lists'); host.replaceChildren();
   for (const account of ACCOUNTS) {
-    const list = document.createElement('datalist'); list.id = `categories-${account}`;
-    for (const name of categoryOptions([...tasks.values()], account)) list.append(new Option(name, name));
-    host.append(list);
+    categoryCache.set(account, categoryOptions([...tasks.values()], account));
   }
 }
 function summary() {
@@ -117,7 +114,7 @@ function summary() {
 function autoSize(control) {
   if (control.tagName !== 'TEXTAREA' || !control.getClientRects().length) return;
   control.style.height = '0px';
-  const height = Math.max(24, control.scrollHeight + 2);
+  const height = Math.max(32, control.scrollHeight + 2);
   control.style.height = `${Math.min(160, height)}px`;
   control.style.overflowY = height > 160 ? 'auto' : 'hidden';
 }
@@ -132,16 +129,11 @@ function updateRowAppearance(row, task) {
 }
 function scheduleRender() {
   clearTimeout(renderTimer);
-  renderTimer = setTimeout(async () => {
-    if (!pending && !saveFailed) {
-      try {
-        const fresh = await store.all();
-        // Do not replace a row during an in-progress edit.
-        if (!document.activeElement?.closest('tr[data-id]')) { tasks = new Map(fresh.map(t => [t.id, t])); render(); }
-        else render();
-      } catch (error) { showError(error.message); }
-    } else render();
-  }, 80);
+  layoutPending = true;
+  renderTimer = setTimeout(() => {
+    if (editingCell()) return;
+    render(); if (syncPending) void syncFromStore();
+  }, 0);
 }
 
 function inputFor(task, field, draft, bucket) {
@@ -163,15 +155,12 @@ function inputFor(task, field, draft, bucket) {
   } else {
     control = document.createElement('input'); control.type = 'text'; control.value = task[field];
     control.placeholder = field === 'category' ? 'Category…' : field === 'ticket' ? '' : OWNER;
-    if (field === 'category') { control.setAttribute('list', `categories-${task.account}`); control.autocomplete = 'off'; }
+    if (field === 'category') control.autocomplete = 'off';
   }
   control.className = `cell-input field-${field}`; control.dataset.field = field;
   control.setAttribute('aria-label', `${labels[field]}, ${task.account}, ${draft ? `new ${bucket === 'week' ? 'this week' : 'remaining'} action` : task.title || 'untitled action'}`);
-  control.addEventListener(field === 'done' ? 'change' : 'input', async () => {
+  function commitValue(value) {
     const row = control.closest('tr');
-    if (field === 'done') { await changeCompletion(task, control.checked, control); return; }
-    const value = control.value;
-    if (field === 'due' && control.validity.badInput) return;
     if (task[field] === value) return;
     task[field] = value;
     const updatedAt = new Date().toISOString(); task.updatedAt = updatedAt;
@@ -179,25 +168,29 @@ function inputFor(task, field, draft, bucket) {
       row.dataset.draft = 'false'; row.classList.remove('draft-row');
       tasks.set(task.id, task); row.querySelector('[data-field="done"]').disabled = false;
       drafts.delete(`${bucket}:${row.dataset.account}`);
-      row.closest('tbody').append(makeRow(draftFor(row.dataset.account, bucket), true, bucket));
+      const group = row.closest('tbody');
+      group.append(rowFor(draftFor(group.dataset.account, group.dataset.bucket), true, group.dataset.bucket));
       for (const cell of row.querySelectorAll('[data-field]')) cell.setAttribute('aria-label', `${labels[cell.dataset.field]}, ${task.account}, ${task.title || 'untitled action'}`);
       control.placeholder = field === 'title' ? 'Action item…' : control.placeholder;
     }
-    if (field === 'account') row.querySelector('[data-field="category"]').setAttribute('list', `categories-${value}`);
     // Keep an edited action visible if its date or account moves it into Remaining Items.
-    if (sectionFor(task) === 'remaining' && (bucket === 'week' || field === 'account')) expandedRemaining.add(task.account);
+    if (sectionFor(task) === 'remaining' && (row.closest('tbody').dataset.bucket === 'week' || field === 'account')) expandedRemaining.add(task.account);
     if (field === 'ticket') updateTicketLink(row, value);
-    if (field === 'category') refreshCategories();
     autoSize(control); updateRowAppearance(row, task); summary();
     void saveTask(task, {[field]: value, updatedAt});
+    layoutPending = true;
+  }
+  const completion = ['category', 'owner'].includes(field) ? inlineCompletion(control,
+    () => field === 'category'
+      ? [...new Set([...(categoryCache.get(task.account) || []), ...categoryOptions([...tasks.values()].filter(t => t.id !== task.id), task.account)])]
+      : [...new Set([OWNER, ...[...tasks.values()].filter(t => t.id !== task.id).map(t => t.owner).filter(Boolean)])],
+    commitValue, message => { el('completion-hint').textContent = message; }) : null;
+  control.addEventListener(field === 'done' ? 'change' : 'input', async event => {
+    if (field === 'done') { await changeCompletion(task, control.checked, control); return; }
+    if (field === 'due' && control.validity.badInput) return;
+    commitValue(control.value); completion?.onInput(event);
   });
   if (field === 'title') control.title = 'Enter adds a new line. Tab moves to the next field.';
-  if (control.tagName === 'TEXTAREA' && field !== 'title') control.addEventListener('keydown', event => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault(); const inputs = [...control.closest('tr').querySelectorAll('[data-field]')];
-      inputs[inputs.indexOf(control) + 1]?.focus();
-    }
-  });
   return control;
 }
 
@@ -218,7 +211,23 @@ function makeRow(task, draft = false, bucket = '') {
       const anchor = document.createElement('a'); anchor.className = 'ticket-link'; anchor.textContent = '↗'; anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; anchor.setAttribute('aria-label', 'Open ticket link');
       wrapper.append(control, anchor); cell.append(wrapper);
     } else if (field === 'due') {
-      cell.append(control); const hint = document.createElement('span'); hint.className = 'due-hint'; cell.append(hint);
+      const wrapper = document.createElement('div'); wrapper.className = 'date-control'; wrapper.append(control);
+      if (typeof control.showPicker === 'function') {
+        wrapper.classList.add('with-picker');
+        const picker = document.createElement('button'); picker.type = 'button'; picker.className = 'calendar-button'; picker.tabIndex = -1;
+        picker.setAttribute('aria-label', `Open calendar, ${task.account}, ${draft ? 'new action' : task.title || 'untitled action'}`);
+        picker.title = 'Choose a due date. Alt+Down or F4 also opens the calendar.';
+        picker.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="5" width="13" height="12" rx="2"/><path d="M6.5 3v4m7-4v4m-10 2h13"/></svg>';
+        const openPicker = () => { control.focus({preventScroll: true}); try { control.showPicker(); } catch {} };
+        picker.onclick = openPicker;
+        control.addEventListener('keydown', event => {
+          if (event.key === 'F4' || (event.altKey && !event.ctrlKey && event.key === 'ArrowDown')) {
+            event.preventDefault(); event.stopPropagation(); openPicker();
+          }
+        });
+        wrapper.append(picker);
+      }
+      cell.append(wrapper); const hint = document.createElement('span'); hint.className = 'due-hint'; cell.append(hint);
     } else cell.append(control);
     row.append(cell);
   }
@@ -228,6 +237,23 @@ function makeRow(task, draft = false, bucket = '') {
     if (row.dataset.draft !== 'true') scheduleRender();
   });
   return row;
+}
+function rowFor(task, draft = false, bucket = '') {
+  let row = rowViews.get(task.id);
+  if (!row) { row = makeRow(task, draft, bucket); rowViews.set(task.id, row); }
+  return row;
+}
+function updateRow(row, task, draft) {
+  row.dataset.account = task.account;
+  row.querySelector('.calendar-button')?.setAttribute('aria-label', `Open calendar, ${task.account}, ${draft ? 'new action' : task.title || 'untitled action'}`);
+  for (const control of row.querySelectorAll('[data-field]')) {
+    const field = control.dataset.field;
+    if (field === 'done') { control.checked = task.done; control.disabled = draft; }
+    else if (control.value !== task[field]) control.value = task[field];
+    if (field === 'title') control.placeholder = draft ? 'Add an action item…' : 'Action item…';
+    control.setAttribute('aria-label', `${labels[field]}, ${task.account}, ${draft ? `new ${row.closest('tbody')?.dataset.bucket === 'week' ? 'this week' : 'remaining'} action` : task.title || 'untitled action'}`);
+  }
+  updateTicketLink(row, task.ticket); updateRowAppearance(row, task);
 }
 function bandRow(title, description, className) {
   const row = document.createElement('tr'); row.className = className;
@@ -241,58 +267,85 @@ function draftFor(account, section) {
   if (!drafts.has(key)) drafts.set(key, newTask(account));
   return drafts.get(key);
 }
-function subsectionRow(account, section, count, group, week) {
+function remainingOpen(account) {
+  return expandedRemaining.has(account) || (Boolean(query.text.trim() || query.status) && !collapsedSearch.has(account));
+}
+function subsectionRow(account, section, group) {
   const row = document.createElement('tr'); row.className = 'subsection-row';
   const cell = document.createElement('th'); cell.colSpan = FIELDS.length; cell.scope = 'rowgroup';
   const remaining = section === 'remaining';
   const bar = document.createElement(remaining ? 'button' : 'div'); bar.className = 'subsection-bar';
   const icon = document.createElement('span'); icon.className = 'section-chevron'; icon.setAttribute('aria-hidden', 'true');
-  icon.textContent = remaining ? '›' : '⌄';
+  icon.textContent = remaining ? '›' : '−';
   const title = document.createElement('span'); title.className = 'subsection-title'; title.textContent = remaining ? 'Remaining Items' : 'This Week';
-  const badge = document.createElement('span'); badge.className = 'section-count'; badge.textContent = count;
+  const badge = document.createElement('span'); badge.className = 'section-count';
   const info = document.createElement('span'); info.className = 'subsection-description';
-  info.textContent = remaining ? 'Later or undated' : `${shortDate(week.start)}–${shortDate(week.end)} · Includes overdue`;
+  info.textContent = remaining ? 'Later or undated' : 'Includes overdue';
   bar.append(icon, title, badge, info);
   if (remaining) {
     bar.type = 'button'; bar.setAttribute('aria-label', `Remaining Items, ${account}`);
     bar.setAttribute('aria-controls', group.id);
     bar.setAttribute('aria-expanded', String(!group.hidden));
     bar.onclick = () => {
-      group.hidden = !group.hidden;
-      if (group.hidden) expandedRemaining.delete(account); else expandedRemaining.add(account);
+      if (remainingOpen(account)) { expandedRemaining.delete(account); collapsedSearch.add(account); }
+      else { expandedRemaining.add(account); collapsedSearch.delete(account); }
+      group.hidden = !remainingOpen(account);
       bar.setAttribute('aria-expanded', String(!group.hidden));
       if (!group.hidden) for (const textarea of group.querySelectorAll('textarea')) autoSize(textarea);
     };
   }
   cell.append(bar); row.append(cell); return row;
 }
-function render() {
-  const focus = currentFocus();
-  const table = el('actions-table'); for (const body of [...table.tBodies]) body.remove();
+function initializeGroups() {
+  const table = el('actions-table');
+  for (const account of ACCOUNTS) {
+    const heading = document.createElement('tbody'); heading.className = 'account-heading'; heading.dataset.account = account;
+    heading.append(bandRow(account, '', 'account-row'));
+    // A stable count node avoids replacing the heading or disclosure button.
+    const count = document.createElement('span'); count.className = 'band-description'; heading.querySelector('th').append(count);
+    table.append(heading);
+    const view = {heading, count, groups: new Map()}; accountViews.set(account, view);
+    for (const section of archived ? ['archive'] : ['week', 'remaining']) {
+      const body = document.createElement('tbody'); body.className = 'account-records'; body.dataset.account = account; body.dataset.bucket = section;
+      body.id = `records-${account.toLowerCase()}-${section}`;
+      body.hidden = section === 'remaining';
+      let subheading;
+      if (!archived) {
+        subheading = document.createElement('tbody'); subheading.className = 'subsection-heading';
+        subheading.append(subsectionRow(account, section, body)); table.append(subheading);
+      }
+      table.append(body); view.groups.set(section, {body, subheading});
+    }
+  }
+}
+function render({force = false} = {}) {
+  if (!force && editingCell()) { layoutPending = true; summary(); return; }
+  layoutPending = false;
+  const table = el('actions-table');
+  if (!accountViews.size) initializeGroups();
   const all = [...tasks.values()];
   const filtered = all.filter(t => t.done === archived && matches(t, query.text, query.account, query.status));
   const list = archived ? filtered.sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || '') || compareTasks(a, b)).slice(0, archiveLimit) : filtered;
-  const accounts = query.account ? [query.account] : ACCOUNTS;
-  const sections = archived ? ['archive'] : ['week', 'remaining'];
-  const week = weekBounds();
-  for (const account of accounts) {
+  for (const account of ACCOUNTS) {
     const accountRecords = list.filter(t => t.account === account);
-    if (archived && !accountRecords.length) continue;
-    const heading = document.createElement('tbody'); heading.className = 'account-heading'; heading.dataset.account = account;
-    heading.append(bandRow(account, `${accountRecords.length} ${accountRecords.length === 1 ? 'action' : 'actions'}`, 'account-row'));
-    table.append(heading);
-    for (const section of sections) {
+    const view = accountViews.get(account);
+    const hidden = Boolean(query.account && query.account !== account) || ((archived || query.text.trim() || query.status) && !accountRecords.length);
+    view.heading.hidden = hidden;
+    view.count.textContent = `${accountRecords.length} ${accountRecords.length === 1 ? 'action' : 'actions'}`;
+    for (const [section, group] of view.groups) {
       const records = accountRecords.filter(t => archived || sectionFor(t) === section).sort(compareTasks);
-      const group = document.createElement('tbody'); group.className = 'account-records'; group.dataset.account = account; group.dataset.bucket = section;
-      group.id = `records-${account.toLowerCase()}-${section}`;
-      group.hidden = section === 'remaining' && !expandedRemaining.has(account);
-      if (!archived) {
-        const subheading = document.createElement('tbody'); subheading.className = 'subsection-heading';
-        subheading.append(subsectionRow(account, section, records.length, group, week)); table.append(subheading);
+      group.body.hidden = hidden || (section === 'remaining' && !remainingOpen(account));
+      if (group.subheading) {
+        group.subheading.hidden = hidden;
+        group.subheading.querySelector('.section-count').textContent = records.length;
+        group.subheading.querySelector('[aria-expanded]')?.setAttribute('aria-expanded', String(remainingOpen(account)));
       }
-      for (const record of records) group.append(makeRow(record, false, section));
-      if (!archived) group.append(makeRow(draftFor(account, section), true, section));
-      table.append(group);
+      const rows = records.map(record => rowFor(record, false, section));
+      if (!archived) rows.push(rowFor(draftFor(account, section), true, section));
+      reconcileChildren(group.body, hidden ? [] : rows);
+      for (const row of rows) {
+        const record = tasks.get(row.dataset.id); updateRow(row, record || draftFor(account, section), !record);
+      }
     }
   }
   refreshCategories(); summary();
@@ -301,7 +354,6 @@ function render() {
   el('clear-filters').hidden = !query.text && !query.account && !query.status;
   el('show-more').hidden = !archived || filtered.length <= archiveLimit;
   for (const textarea of table.querySelectorAll('textarea')) autoSize(textarea);
-  restoreFocus(focus);
 }
 
 async function changeCompletion(task, done, control) {
@@ -309,7 +361,10 @@ async function changeCompletion(task, done, control) {
   const original = {done: task.done, completedAt: task.completedAt};
   const patch = {done, completedAt: done ? new Date().toISOString() : null, updatedAt: new Date().toISOString()};
   if (await saveTask(task, patch)) {
-    Object.assign(task, patch); render();
+    Object.assign(task, patch);
+    const controls = [...el('actions-table').querySelectorAll('.field-done')].filter(c => c !== control && !c.disabled && c.getClientRects().length);
+    const next = controls.find(c => Boolean(control.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING)) || controls.at(-1);
+    render({force: true}); next?.focus();
     toast(done ? 'Action moved to Archive.' : 'Action restored to your list.', async () => {
       const undoPatch = {...original, updatedAt: new Date().toISOString()};
       if (await saveTask(task, undoPatch)) { Object.assign(task, undoPatch); render(); el('toast').hidden = true; }
@@ -342,7 +397,7 @@ el('import-file').onchange = async event => {
     if (file.size > 30 * 1024 * 1024) throw new Error('Choose a file smaller than 30 MB.');
     const imported = parseImport(await file.text());
     const importedResult = await store.import(imported, el('overwrite-import').checked);
-    tasks = new Map((await store.all()).map(t => [t.id, t])); render(); channel?.postMessage({imported: true});
+    mergeTasks(await store.all()); render(); channel?.postMessage({imported: true});
     result.textContent = `${importedResult.count} records imported. ${imported.length - importedResult.count} matching records kept.`;
     toast(`${importedResult.count} records imported.`);
   } catch (error) { result.textContent = `Import stopped. ${error.message}`; }
@@ -350,27 +405,58 @@ el('import-file').onchange = async event => {
 };
 el('retry-save').onclick = async () => {
   for (const [id, patch] of [...retryEdits]) await saveTask(tasks.get(id), patch);
-  if (!retryEdits.size) { tasks = new Map((await store.all()).map(t => [t.id, t])); render(); }
+  if (!retryEdits.size) { mergeTasks(await store.all()); render(); }
 };
-el('search').oninput = event => { query.text = event.target.value; render(); };
+el('search').oninput = event => { query.text = event.target.value; collapsedSearch.clear(); render(); };
 el('account-filter').onchange = event => { query.account = event.target.value; render(); };
-el('status-filter').onchange = event => { query.status = event.target.value; render(); };
-el('clear-filters').onclick = () => { query.text = ''; query.account = ''; query.status = ''; el('search').value = ''; el('account-filter').value = ''; el('status-filter').value = ''; render(); };
-el('show-more').onclick = () => { archiveLimit += 150; render(); };
+el('status-filter').onchange = event => { query.status = event.target.value; collapsedSearch.clear(); render(); };
+el('clear-filters').onclick = () => { query.text = ''; query.account = ''; query.status = ''; collapsedSearch.clear(); el('search').value = ''; el('account-filter').value = ''; el('status-filter').value = ''; render(); };
+el('show-more').onclick = () => { archiveLimit += 50; render(); };
+function newAction(control) {
+  if (archived || !store) return;
+  const row = control?.closest('tr[data-id]');
+  const account = (row && tasks.get(row.dataset.id)?.account) || row?.dataset.account || query.account || ACCOUNTS[0];
+  const section = row?.closest('tbody')?.dataset.bucket || 'week';
+  query.text = ''; query.status = ''; collapsedSearch.clear(); el('search').value = ''; el('status-filter').value = '';
+  if (query.account) { query.account = account; el('account-filter').value = account; }
+  if (section === 'remaining') expandedRemaining.add(account);
+  render({force: true});
+  const field = rowViews.get(draftFor(account, section).id)?.querySelector('.field-title');
+  field?.focus(); field?.scrollIntoView({block: 'nearest', inline: 'nearest'});
+}
+const gridKeys = installGridKeys(el('actions-table'), {newAction});
+el('new-action')?.addEventListener('click', () => newAction());
+el('keyboard-button').onclick = () => el('keyboard-dialog').showModal();
+el('close-keyboard').onclick = () => el('keyboard-dialog').close();
+el('keyboard-dialog').addEventListener('click', event => { if (event.target === el('keyboard-dialog')) el('keyboard-dialog').close(); });
+el('search').addEventListener('keydown', event => {
+  if (event.key === 'Enter') { event.preventDefault(); gridKeys.focusFirst(); }
+  if (event.key === 'Escape') { query.text = ''; collapsedSearch.clear(); el('search').value = ''; render(); }
+});
 document.addEventListener('keydown', event => {
-  if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.target.closest('input, textarea, select, dialog')) { event.preventDefault(); el('search').focus(); }
+  if (event.defaultPrevented || event.isComposing || event.target.closest('dialog')) return;
+  const editing = event.target.closest('input, textarea, select');
+  if (((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') || (event.key === '/' && !editing)) {
+    event.preventDefault(); el('search').focus(); el('search').select();
+  } else if (event.altKey && event.key.toLowerCase() === 'n' && !archived) { event.preventDefault(); newAction(event.target.closest('[data-field]')); }
+  else if (event.key === '?' && !editing) { event.preventDefault(); el('keyboard-dialog').showModal(); }
 });
 window.addEventListener('beforeunload', event => { if (pending || saveFailed) { event.preventDefault(); event.returnValue = ''; } });
-channel?.addEventListener('message', async () => {
-  if (!store || pending || saveFailed) return;
-  if (document.activeElement?.closest('tr[data-id]')) return;
-  tasks = new Map((await store.all()).map(t => [t.id, t])); render();
-});
-document.addEventListener('visibilitychange', async () => {
-  if (document.visibilityState !== 'visible' || !store || pending || saveFailed) return;
-  currentDay = localDay(); tasks = new Map((await store.all()).map(t => [t.id, t])); render();
-});
-setInterval(() => { if (localDay() !== currentDay && !document.activeElement?.closest('tr[data-id]')) {currentDay = localDay(); render();} }, 60000);
+async function syncFromStore() {
+  syncPending = true;
+  if (!store || pending || saveFailed || editingCell()) return;
+  try {
+    syncPending = false;
+    const fresh = await store.all();
+    // Focus or saving might have started while the IndexedDB read was pending.
+    if (pending || saveFailed || editingCell()) { syncPending = true; return; }
+    mergeTasks(fresh); currentDay = localDay(); render();
+  } catch (error) { syncPending = true; showError(error.message); }
+}
+channel?.addEventListener('message', () => { void syncFromStore(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void syncFromStore(); });
+el('actions-table').addEventListener('focusout', () => { if (layoutPending || syncPending) scheduleRender(); });
+setInterval(() => { if (localDay() !== currentDay && !editingCell()) {currentDay = localDay(); render();} }, 60000);
 
 try {
   store = await openStore();
@@ -381,10 +467,11 @@ try {
   });
   sizing.restore(await store.setting('column-widths'));
   el('reset-widths').onclick = () => sizing.reset();
-  tasks = new Map((await store.all()).map(task => [task.id, task]));
+  mergeTasks(await store.all());
   render(); setSaveState();
 } catch (error) {
   saveFailed = true; setSaveState();
   showError(`Browser storage is unavailable. ${error.message} Use a normal browser window with site storage enabled.`);
   for (const control of app.querySelectorAll('input, select, button')) if (!['emergency-export', 'data-button', 'close-data', 'export-json'].includes(control.id)) control.disabled = true;
 }
+

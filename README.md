@@ -1,14 +1,14 @@
 # Action Items
 
-A single editable table for Internal, Goldman, Uber, Claritev, and Paramount. Blue headers separate accounts. Each account shows This Week first, including overdue actions. Remaining Items holds later and undated actions and starts collapsed. Click the dark gray Remaining Items bar to expand or collapse that account. Expanded sections stay open during edits and filtering; reloading starts them collapsed again. Each open subsection ends with a blank row. Typing starts and saves a record automatically.
+A single editable table for Internal, Goldman, Uber, Claritev, and Paramount. The interface follows the Daily Log app: white panels, teal accents, rounded inputs, and visible focus states. Each account shows This Week first, including overdue actions. Remaining Items holds later and undated actions and starts collapsed. Click its header to expand or collapse that account. Expanded sections stay open during edits and filtering; reloading starts them collapsed again. Each open subsection ends with a blank row. Typing starts and saves a record automatically.
 
 ## Open locally
 
-Requires Node.js 20 or newer. Run `node serve.mjs` and open http://127.0.0.1:4173. Run `node --test core.test.js` for domain checks.
+Requires Node.js 20 or newer. Run `node serve.mjs` and open http://127.0.0.1:4173. Run `npm test` for domain and interaction regression checks.
 
 ## Publish on GitHub Pages
 
-Publish `index.html`, `archive.html`, `app.js`, `core.js`, `store.js`, `columns.js`, `styles.css`, `icon.svg`, and `.nojekyll` at the repository root. In Settings > Pages, choose Deploy from a branch, then main and /(root). No build command or third-party services are required. The test, server, and documentation files are optional for hosting.
+Publish `index.html`, `archive.html`, `app.js`, `core.js`, `store.js`, `columns.js`, `interactions.js`, `styles.css`, `icon.svg`, and `.nojekyll` at the repository root. In Settings > Pages, choose Deploy from a branch, then main and /(root). No build command or third-party services are required. The test, server, and documentation files are optional for hosting.
 
 ## Records and autosave
 
@@ -18,7 +18,13 @@ Use Data > Download JSON for a complete backup. Import merges by stable record I
 
 The migration JSON delivered separately contains the workbook's populated tasks, including completed and hidden rows. Import the file once on the published site. Archived rows keep their historical completion date unknown because the workbook did not record completion timestamps. Original sheet names and row numbers stay in each source reference. Status options are Urgent, Waiting, Scheduled, and Not Urgent. Existing records migrate automatically: Waiting and Scheduled take priority, followed by Urgent, then Not Urgent. The original classification stays in backup metadata. Existing due dates stay unchanged. New actions start without a due date, with status Not Urgent and owner Michael Sheerin.
 
-Category suggestions include active and archived categories for the selected account. Add a new category by typing. Ticket entries accept IDs or HTTP/HTTPS links. Enter adds a line in Action Item. Notes support multiple lines with Shift+Enter. Tab moves between fields. Press / outside an editable field to focus search.
+Category completion includes active and archived categories for the selected account. Owner completion includes existing owners. Suggestions appear as selected text inside the textbox. Tab, Enter, Right Arrow, or leaving the field accepts the completion. Escape keeps the typed prefix. Backspace dismisses a suggested suffix before deleting typed text. New categories stay editable without a selection list. Only accepted completion text is saved; the typed prefix saves during entry.
+
+Controls retain their DOM nodes across edits and filtering. Sorting and account/date regrouping wait until focus leaves the editable table, so a row never moves under an open dropdown or calendar. Incoming updates from other tabs wait until the current edit finishes. No delayed row rebuild interrupts the next field. A dedicated calendar button, Alt+Down, or F4 opens the native date picker. New actions retain a blank due date until a date is selected.
+
+Search and status filters reveal matching Remaining Items automatically and hide accounts without matches. Clear the filter to return to the usual collapsed layout. Archive initially renders 50 records; Show more loads another 50. Search covers the entire archive regardless of the rendered limit.
+
+Ticket entries accept IDs or HTTP/HTTPS links. Enter adds a line in Action Item. Notes support multiple lines with Shift+Enter. Tab and Shift+Tab move directly between fields. Ctrl+Alt+Up/Down moves within the same column across visible rows. Alt+Left/Right moves between fields. Ctrl+Enter (Cmd+Enter on Mac) starts another action in the current section. Alt+N starts a new action. Ctrl+K (Cmd+K on Mac) or / outside a field opens search. Enter in search focuses the first visible action. Escape clears search or leaves an editable field. The Shortcuts button, or ? outside a field, shows the keyboard reference. Dropdown arrows keep native browser behavior.
 
 Drag the right edge of any column header to resize. Double-click an edge to fit the visible records. Focus an edge and use Left/Right arrows for 10-pixel changes, or Shift+Arrow for 50-pixel changes. Widths save in this browser and apply to the action list and archive. Reset widths in the table footer restores the original layout.
 
