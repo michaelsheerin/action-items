@@ -167,3 +167,78 @@ kbd { font-family: inherit; font-size: 10px; line-height: 1.35; }
 .calendar-button { position: absolute; right: 3px; top: 3px; display: grid; place-items: center; width: 26px; height: 26px; padding: 4px; border: 0; border-radius: 4px; color: #748b93; background: transparent; }
 .calendar-button:hover { color: #11695f; background: #e8f4ef; }
 .calendar-button svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: round; }
+
+/* Navy, blue, and slate: distinguish hierarchy and cell boundaries through color. */
+:root { color: #1d3048; background: #edf1f7; --accent: #235b9a; --line: #b8c6d8; --muted: #50657f; }
+.topbar { border-bottom-color: #b8c6d8; }
+.brand-mark { background: #183b63; }
+nav { background: #e7edf6; border-color: #c4cfdf; }
+nav a:hover { color: #183b63; background: #d5e3f5; }
+nav a[aria-current] { color: #183b63; background: #fff; box-shadow: 0 1px 4px #183b6320; }
+.nav-count { color: #36516f; background: #dce6f4; }
+.avatar { color: #244d7a; background: #e0eafa; border-color: #a9bedb; }
+.save-state { color: #365e51; }
+.button { color: #294768; border-color: #9fb2cb; }
+.button:hover { background: #e6eefb; border-color: #6689b6; }
+.button.primary:hover { background: #183f72; border-color: #183f72; }
+.summary strong { color: #183b63; }
+.summary .overdue-count strong { color: #a0263d; }
+.work-surface { border-color: #a8b9cf; box-shadow: 0 3px 15px #203b5e09; }
+.toolbar { background: #f5f7fb; border-bottom-color: #abbdd4; }
+.search-box { background: #fff; border-color: #9fb2cb; }
+.search-box svg { stroke: #516b8a; }
+.search-box:focus-within { border-color: #2d68b4; box-shadow: 0 0 0 3px #2d68b419; }
+.search-box input { color: #1d3553; }
+input::placeholder, textarea::placeholder { color: #63768e; }
+.filters select { color: #294768; border-color: #9fb2cb; }
+kbd { color: #405873; background: #fff; border-color: #b4c2d4; }
+.table-wrap { scrollbar-color: #879dbb #e5ecf5; }
+thead th { color: #fff; background: #334a68; border-bottom-color: #1b3351; box-shadow: inset -1px 0 #7188a6; }
+.column-resizer { border-right-color: #899fb9; }
+.column-resizer:hover, .column-resizer:focus-visible { background: #a8c8f066; outline-color: #b7d5ff; }
+.account-row th { color: #fff; background: #183b63; border-top-color: #edf1f7; border-bottom-color: #0f2a4a; border-left-color: #628ebd; }
+.account-row .band-description { color: #fff; background: #355b83; border-color: #7594b7; }
+.subsection-row th { background: #dce8f9; border-bottom-color: #9eb5d3; }
+.subsection-bar:not(button) { color: #173b65; }
+.subsection-bar:not(button) .section-count { color: #173b65; background: #c1d5f0; }
+button.subsection-bar { color: #2d435e; background: #d8e0ec; }
+button.subsection-bar:hover { color: #183b63; background: #c3d4ec; }
+button.subsection-bar[aria-expanded="true"] { color: #183b63; background: #cbdaf0; }
+.section-count { color: #304966; background: #bbcbe0; }
+.subsection-description { color: #4d627e; }
+td { border-bottom-color: #b7c7dd; box-shadow: inset -1px 0 #b0c0d6; }
+.account-records .task-row:nth-child(even):not(.draft-row) td { background: #e9f0fa; }
+.account-records .task-row:nth-child(even):not(.draft-row) .cell-input:not(.field-status):not(.field-done) { background: #f0f5fd; }
+.account-records .task-row:hover td { background: #dce8fb; }
+.account-records .task-row:focus-within td { background: #d4e4fc; }
+.cell-input { color: #243a55; border-color: #9eafc6; }
+.cell-input:hover { border-color: #577fae; }
+.cell-input:focus { border-color: #245fae; box-shadow: 0 0 0 2px #245fae26; }
+.cell-input::selection { background: #bad4f8; color: #173b65; }
+.field-title { color: #192f4b; }
+.field-notes { color: #354b63; }
+.field-account { color: #36516f; }
+.field-status[data-value="Urgent"] { color: #8f1934; background: #ffe0e5; border-color: #bc7887; }
+.field-status[data-value="Waiting"] { color: #6a4a00; background: #fff0bc; border-color: #c29739; }
+.field-status[data-value="Scheduled"] { color: #214f88; background: #d8e9ff; border-color: #759bd0; }
+.field-status[data-value="Not Urgent"] { color: #3b4c63; background: #e1e6ee; border-color: #9daabc; }
+.field-due.overdue-date { color: #a0263d; }
+.ticket-link { color: #1f5b9b; }
+.ticket-link:hover { color: #143d70; background: #dce8f9; }
+.account-records .draft-row td { background: #e3ecf9; border-bottom-color: #96afcf; }
+.draft-row .cell-input { background: #f4f7fd; border-color: #a8bbd4; }
+.draft-row .field-account, .draft-row .field-owner { color: #536b88; }
+.table-footer { color: #41556f; background: #e8eef6; border-top-color: #abbad0; }
+.footer-divider { color: #7186a2; }
+.workspace-footer { color: #5c708b; }
+.empty-state { background: #e8f0fc; }
+.toast { color: #fff; background: #183b63; border-color: #315b8c; }
+dialog { color: #243a55; border-color: #a8bbd4; }
+.icon-button { color: #536e90; }
+.icon-button:hover { background: #e6eefb; }
+.small-print, .dialog-intro, .data-action p { color: #526983; }
+.shortcut-list dt { color: #354f6c; }
+.shortcut-list dd { color: #526983; }
+.calendar-button { color: #455e7a; }
+.calendar-button:hover { color: #173b65; background: #d8e6f8; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline-color: #245fae; }

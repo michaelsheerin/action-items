@@ -1,6 +1,6 @@
 # Action Items
 
-A single editable table for Internal, Goldman, Uber, Claritev, and Paramount. The interface follows the Daily Log app: white panels, teal accents, rounded inputs, and visible focus states. Each account shows This Week first, including overdue actions. Remaining Items holds later and undated actions and starts collapsed. Click its header to expand or collapse that account. Expanded sections stay open during edits and filtering; reloading starts them collapsed again. Each open subsection ends with a blank row. Typing starts and saves a record automatically.
+A single editable table for Internal, Goldman, Uber, Claritev, and Paramount. The interface follows the Daily Log app's layout with rounded inputs and visible focus states. A navy, blue, and slate palette separates account headers, subsection bands, alternating rows, and column boundaries. Each account shows This Week first, including overdue actions. Remaining Items holds later and undated actions and starts collapsed. Click its header to expand or collapse that account. Expanded sections stay open during edits and filtering; reloading starts them collapsed again. Each open subsection ends with a blank row. Typing starts and saves a record automatically.
 
 ## Open locally
 
