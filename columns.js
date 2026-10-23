@@ -37,6 +37,7 @@ export function installColumnSizing(table, fields, {onChange, onResize, onError}
     context.font = getComputedStyle(headers[index]).font;
     let width = context.measureText(headers[index].textContent).width + 24;
     for (const input of table.querySelectorAll(`[data-field="${field}"]`)) {
+      if (!input.getClientRects().length) continue;
       context.font = getComputedStyle(input).font;
       for (const line of String(input.value || '').split('\n')) width = Math.max(width, context.measureText(line).width + (field === 'due' ? 36 : 26));
     }

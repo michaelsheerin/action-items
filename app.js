@@ -1,6 +1,6 @@
 import {ACCOUNTS, OWNER, STATUSES, FIELDS, localDay, weekBounds, sectionFor, compareTasks, matches, categoryOptions, safeURL, newTask, parseImport, csvExport} from './core.js?v=4';
 import {openStore} from './store.js?v=4';
-import {installColumnSizing} from './columns.js?v=4';
+import {installColumnSizing} from './columns.js?v=5';
 
 const archived = document.body.dataset.view === 'archive';
 const app = document.querySelector('#app');
@@ -14,6 +14,7 @@ let renderTimer;
 let retryEdits = new Map();
 let currentDay = localDay();
 const drafts = new Map();
+const expandedRemaining = new Set();
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel('action-items-updates') : null;
 const query = {text: '', account: '', status: ''};
 const labels = {account: 'Account', category: 'Category', title: 'Action item', due: 'Due date', status: 'Status', done: 'Done', notes: 'Notes', ticket: 'Ticket ID / link', owner: 'Owner'};
@@ -30,7 +31,7 @@ app.innerHTML = `
     <section class="work-surface" aria-label="Action tracker">
       <div class="toolbar"><div class="search-box"><svg aria-hidden="true" viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><input id="search" type="search" placeholder="Search actions, categories, tickets…" aria-label="Search actions"><kbd>/</kbd></div><div class="filters"><select id="account-filter" aria-label="Filter by account"><option value="">All accounts</option></select><select id="status-filter" aria-label="Filter by status"><option value="">All statuses</option>${STATUSES.map(status => `<option>${status}</option>`).join('')}</select><button id="clear-filters" class="text-button" hidden>Clear filters</button></div><span id="visible-count" class="visible-count"></span></div>
       <div id="empty-state" class="empty-state" hidden><img src="./icon.svg" alt="" width="36" height="36"><div><strong>${archived ? 'Your completed work will appear here' : 'Start with your next action'}</strong><p>${archived ? 'Complete a task on the Action items page to move the record here.' : 'Type in a blank row below, or import your workbook records.'}</p></div>${!archived ? '<button id="empty-import" class="button">Import records</button>' : ''}</div>
-      <div class="table-wrap" tabindex="0" aria-label="Editable action table"><table id="actions-table"><caption class="sr-only">${archived ? 'Completed action items' : 'All account action items, grouped by week and account'}</caption><colgroup>${FIELDS.map(field => `<col class="col-${field}">`).join('')}</colgroup><thead><tr>${FIELDS.map(field => `<th scope="col" data-column="${field}" ${field === 'done' ? 'class="done-heading"' : ''}>${labels[field]}</th>`).join('')}</tr></thead></table></div>
+      <div class="table-wrap" tabindex="0" aria-label="Editable action table"><table id="actions-table"><caption class="sr-only">${archived ? 'Completed action items, grouped by account' : 'All action items, grouped by account, then This Week and Remaining Items'}</caption><colgroup>${FIELDS.map(field => `<col class="col-${field}">`).join('')}</colgroup><thead><tr>${FIELDS.map(field => `<th scope="col" data-column="${field}" ${field === 'done' ? 'class="done-heading"' : ''}>${labels[field]}</th>`).join('')}</tr></thead></table></div>
       <div class="table-footer"><span>${archived ? 'Uncheck Done to return an action to your list.' : 'Blank rows are ready for typing. Tab moves between fields.'} Drag a column edge to resize.</span><button id="reset-widths" class="text-button">Reset widths</button><button id="show-more" class="text-button" hidden>Show more completed actions</button><span class="local-label"><span class="local-dot"></span>Stored in this browser</span></div>
     </section>
     <div class="workspace-footer"><span>One table. All accounts.</span><span>Week starts Monday · <span id="week-label"></span></span></div>
@@ -114,7 +115,7 @@ function summary() {
   el('week-label').textContent = `${shortDate(weekBounds().start)}–${shortDate(weekBounds().end)}`;
 }
 function autoSize(control) {
-  if (control.tagName !== 'TEXTAREA') return;
+  if (control.tagName !== 'TEXTAREA' || !control.getClientRects().length) return;
   control.style.height = '0px';
   const height = Math.max(24, control.scrollHeight + 2);
   control.style.height = `${Math.min(160, height)}px`;
@@ -183,6 +184,8 @@ function inputFor(task, field, draft, bucket) {
       control.placeholder = field === 'title' ? 'Action item…' : control.placeholder;
     }
     if (field === 'account') row.querySelector('[data-field="category"]').setAttribute('list', `categories-${value}`);
+    // Keep an edited action visible if its date or account moves it into Remaining Items.
+    if (sectionFor(task) === 'remaining' && (bucket === 'week' || field === 'account')) expandedRemaining.add(task.account);
     if (field === 'ticket') updateTicketLink(row, value);
     if (field === 'category') refreshCategories();
     autoSize(control); updateRowAppearance(row, task); summary();
@@ -238,6 +241,31 @@ function draftFor(account, section) {
   if (!drafts.has(key)) drafts.set(key, newTask(account));
   return drafts.get(key);
 }
+function subsectionRow(account, section, count, group, week) {
+  const row = document.createElement('tr'); row.className = 'subsection-row';
+  const cell = document.createElement('th'); cell.colSpan = FIELDS.length; cell.scope = 'rowgroup';
+  const remaining = section === 'remaining';
+  const bar = document.createElement(remaining ? 'button' : 'div'); bar.className = 'subsection-bar';
+  const icon = document.createElement('span'); icon.className = 'section-chevron'; icon.setAttribute('aria-hidden', 'true');
+  icon.textContent = remaining ? '›' : '⌄';
+  const title = document.createElement('span'); title.className = 'subsection-title'; title.textContent = remaining ? 'Remaining Items' : 'This Week';
+  const badge = document.createElement('span'); badge.className = 'section-count'; badge.textContent = count;
+  const info = document.createElement('span'); info.className = 'subsection-description';
+  info.textContent = remaining ? 'Later or undated' : `${shortDate(week.start)}–${shortDate(week.end)} · Includes overdue`;
+  bar.append(icon, title, badge, info);
+  if (remaining) {
+    bar.type = 'button'; bar.setAttribute('aria-label', `Remaining Items, ${account}`);
+    bar.setAttribute('aria-controls', group.id);
+    bar.setAttribute('aria-expanded', String(!group.hidden));
+    bar.onclick = () => {
+      group.hidden = !group.hidden;
+      if (group.hidden) expandedRemaining.delete(account); else expandedRemaining.add(account);
+      bar.setAttribute('aria-expanded', String(!group.hidden));
+      if (!group.hidden) for (const textarea of group.querySelectorAll('textarea')) autoSize(textarea);
+    };
+  }
+  cell.append(bar); row.append(cell); return row;
+}
 function render() {
   const focus = currentFocus();
   const table = el('actions-table'); for (const body of [...table.tBodies]) body.remove();
@@ -247,20 +275,25 @@ function render() {
   const accounts = query.account ? [query.account] : ACCOUNTS;
   const sections = archived ? ['archive'] : ['week', 'remaining'];
   const week = weekBounds();
-  for (const section of sections) {
-    const body = document.createElement('tbody'); body.className = `section-${section}`;
-    body.append(bandRow(section === 'week' ? 'This week' : section === 'remaining' ? 'Remaining actions' : 'Completed actions', section === 'week' ? `${shortDate(week.start)}–${shortDate(week.end)} · Includes overdue` : section === 'remaining' ? 'Later dates and actions without a due date' : 'Uncheck Done to restore', 'section-row'));
-    table.append(body);
-    for (const account of accounts) {
-      const records = list.filter(t => t.account === account && (archived || sectionFor(t) === section)).sort(compareTasks);
-      if (archived && !records.length) continue;
-      const group = document.createElement('tbody'); group.dataset.account = account; group.dataset.bucket = section;
-      group.append(bandRow(account, `${records.length} ${records.length === 1 ? 'action' : 'actions'}`, `group-row account-${account.toLowerCase()}`));
+  for (const account of accounts) {
+    const accountRecords = list.filter(t => t.account === account);
+    if (archived && !accountRecords.length) continue;
+    const heading = document.createElement('tbody'); heading.className = 'account-heading'; heading.dataset.account = account;
+    heading.append(bandRow(account, `${accountRecords.length} ${accountRecords.length === 1 ? 'action' : 'actions'}`, 'account-row'));
+    table.append(heading);
+    for (const section of sections) {
+      const records = accountRecords.filter(t => archived || sectionFor(t) === section).sort(compareTasks);
+      const group = document.createElement('tbody'); group.className = 'account-records'; group.dataset.account = account; group.dataset.bucket = section;
+      group.id = `records-${account.toLowerCase()}-${section}`;
+      group.hidden = section === 'remaining' && !expandedRemaining.has(account);
+      if (!archived) {
+        const subheading = document.createElement('tbody'); subheading.className = 'subsection-heading';
+        subheading.append(subsectionRow(account, section, records.length, group, week)); table.append(subheading);
+      }
       for (const record of records) group.append(makeRow(record, false, section));
       if (!archived) group.append(makeRow(draftFor(account, section), true, section));
       table.append(group);
     }
-    if (!body.isConnected) table.append(body);
   }
   refreshCategories(); summary();
   el('visible-count').textContent = `${filtered.length} ${archived ? 'completed' : 'active'} ${filtered.length === 1 ? 'action' : 'actions'}`;

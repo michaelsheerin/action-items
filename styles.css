@@ -29,10 +29,21 @@ kbd{font-size:9px;border-color:#cbd5e1;padding:0 4px;color:#475569}
 .table-wrap{max-height:calc(100dvh - 170px);min-height:280px;scrollbar-color:#94a3b8 #f1f5f9}
 table{min-width:1290px}.col-account{width:91px}.col-category{width:116px}.col-title{width:24%}.col-due{width:112px}.col-urgency{width:94px}.col-status{width:102px}.col-ticket{width:138px}.col-owner{width:127px}.col-done{width:43px}.col-notes{width:22%}
 thead th{background:#e8edf4;color:#1e293b;font-size:10px;font-weight:700;padding:7px 6px;border-bottom-color:#a8b7ca}thead th:first-child{padding-left:8px}
-.section-row th{padding:8px;background:#f0f5fc;color:#17375e;font-size:12px;font-weight:700;border-bottom-color:#b7c8df}
-.section-remaining .section-row th{border-top:24px solid #fff}
-.section-week .section-row th,.section-remaining .section-row th{background:#17375e;color:#fff;border-bottom-color:#17375e}
-.section-week .section-row .band-description,.section-remaining .section-row .band-description{color:#fff}
+.account-row th{padding:8px 10px;background:#24578a;color:#fff;text-align:left;font-size:12px;font-weight:700;letter-spacing:.1px;border-top:12px solid #fff;border-bottom:1px solid #1d4872}
+.account-heading:first-of-type .account-row th{border-top:0}
+.account-row .band-description{display:inline-block;margin-left:10px;padding:1px 6px;background:#ffffff1c;border:1px solid #ffffff26;border-radius:3px;color:#eef5ff;font-size:9px;font-weight:400;letter-spacing:0;vertical-align:1px}
+.subsection-row th{padding:0;background:#3f4854;color:#fff;text-align:left;border-bottom:1px solid #59616c}
+.subsection-bar{display:flex;align-items:center;gap:7px;width:100%;min-height:28px;padding:5px 10px;border:0;border-radius:0;background:transparent;color:inherit;text-align:left;font-size:10px;line-height:1.4}
+button.subsection-bar:hover{background:#4c5765}
+button.subsection-bar:focus-visible{outline:2px solid #93c5fd;outline-offset:-2px}
+.section-chevron{display:inline-block;width:10px;flex:none;text-align:center;font-size:16px;font-weight:400;line-height:12px}
+button.subsection-bar[aria-expanded="true"] .section-chevron{transform:rotate(90deg)}
+.subsection-title{font-weight:700;letter-spacing:.1px}
+.section-count{padding:0 5px;min-width:18px;border-radius:3px;background:#ffffff1c;color:#fff;text-align:center;font-size:9px;font-weight:400;font-variant-numeric:tabular-nums}
+.subsection-description{margin-left:3px;color:#dce2ea;font-size:9px;font-weight:400}
+.account-records .task-row:nth-child(even):not(.draft-row) td{background:#f8fafc}
+.account-records .task-row:hover td,.account-records .task-row:focus-within td{background:#edf4ff}
+.account-records .draft-row td{border-bottom-color:#cbd5e1}
 .field-status[data-value="Urgent"]{background-color:#fee2e2;color:#991b1b;font-weight:700}
 .field-status[data-value="Not Urgent"]{background-color:#edf2f7;color:#334155}
 thead th{position:relative;padding-right:10px}

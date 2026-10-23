@@ -1,6 +1,6 @@
 # Action Items
 
-A single editable table for Internal, Goldman, Uber, Claritev, and Paramount. The page groups overdue and current-week actions first, followed by later and undated actions. Each account section ends with a blank row. Typing starts and saves a record automatically.
+A single editable table for Internal, Goldman, Uber, Claritev, and Paramount. Blue headers separate accounts. Each account shows This Week first, including overdue actions. Remaining Items holds later and undated actions and starts collapsed. Click the dark gray Remaining Items bar to expand or collapse that account. Expanded sections stay open during edits and filtering; reloading starts them collapsed again. Each open subsection ends with a blank row. Typing starts and saves a record automatically.
 
 ## Open locally
 
@@ -8,7 +8,7 @@ Requires Node.js 20 or newer. Run `node serve.mjs` and open http://127.0.0.1:417
 
 ## Publish on GitHub Pages
 
-Publish `index.html`, `archive.html`, `app.js`, `core.js`, `store.js`, `styles.css`, `icon.svg`, and `.nojekyll` at the repository root. In Settings > Pages, choose Deploy from a branch, then main and /(root). No build command or third-party services are required. The test, server, and documentation files are optional for hosting.
+Publish `index.html`, `archive.html`, `app.js`, `core.js`, `store.js`, `columns.js`, `styles.css`, `icon.svg`, and `.nojekyll` at the repository root. In Settings > Pages, choose Deploy from a branch, then main and /(root). No build command or third-party services are required. The test, server, and documentation files are optional for hosting.
 
 ## Records and autosave
 
