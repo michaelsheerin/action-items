@@ -157,11 +157,11 @@ function inputFor(task, field, draft, bucket) {
     control = document.createElement('input'); control.type = 'date'; control.value = task.due;
   } else if (field === 'title' || field === 'notes') {
     control = document.createElement('textarea'); control.rows = 1; control.value = task[field];
-    control.placeholder = field === 'title' ? draft ? 'Add an action item…' : 'Action item…' : 'Add notes…';
+    control.placeholder = field === 'title' ? draft ? 'Add an action item…' : 'Action item…' : '';
     control.spellcheck = true;
   } else {
     control = document.createElement('input'); control.type = 'text'; control.value = task[field];
-    control.placeholder = field === 'category' ? 'Category…' : field === 'ticket' ? 'ID or https://…' : OWNER;
+    control.placeholder = field === 'category' ? 'Category…' : field === 'ticket' ? '' : OWNER;
     if (field === 'category') { control.setAttribute('list', `categories-${task.account}`); control.autocomplete = 'off'; }
   }
   control.className = `cell-input field-${field}`; control.dataset.field = field;
@@ -188,7 +188,8 @@ function inputFor(task, field, draft, bucket) {
     autoSize(control); updateRowAppearance(row, task); summary();
     void saveTask(task, {[field]: value, updatedAt});
   });
-  if (control.tagName === 'TEXTAREA') control.addEventListener('keydown', event => {
+  if (field === 'title') control.title = 'Enter adds a new line. Tab moves to the next field.';
+  if (control.tagName === 'TEXTAREA' && field !== 'title') control.addEventListener('keydown', event => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault(); const inputs = [...control.closest('tr').querySelectorAll('[data-field]')];
       inputs[inputs.indexOf(control) + 1]?.focus();
