@@ -1,7 +1,7 @@
 import {ACCOUNTS, OWNER, STATUSES, FIELDS, localDay, weekBounds, sectionFor, compareTasks, matches, categoryOptions, safeURL, newTask, parseImport, csvExport} from './core.js?v=4';
 import {openStore} from './store.js?v=4';
 import {installColumnSizing} from './columns.js?v=6';
-import {inlineCompletion, reconcileChildren, installGridKeys} from './interactions.js?v=6';
+import {inlineCompletion, reconcileChildren, installGridKeys} from './interactions.js?v=7';
 
 const archived = document.body.dataset.view === 'archive';
 const app = document.querySelector('#app');

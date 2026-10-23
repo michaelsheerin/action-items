@@ -59,8 +59,8 @@ export function reconcileChildren(parent, desired) {
 export function installGridKeys(table, {newAction}) {
   const visible = selector => [...table.querySelectorAll(selector)].filter(node => !node.disabled && node.getClientRects().length);
   function focus(node) { node?.focus(); node?.scrollIntoView({block: 'nearest', inline: 'nearest'}); }
-  function next(control, backwards = false) {
-    const fields = visible('[data-field]'); const index = fields.indexOf(control);
+  function next(control, backwards = false, includeSections = false) {
+    const fields = visible(includeSections ? '[data-field], button.subsection-bar' : '[data-field]'); const index = fields.indexOf(control);
     focus(fields[index + (backwards ? -1 : 1)]);
     return Boolean(fields[index + (backwards ? -1 : 1)]);
   }
@@ -72,7 +72,7 @@ export function installGridKeys(table, {newAction}) {
       event.preventDefault(); newAction(control); return;
     }
     if (event.key === 'Tab' && !event.ctrlKey && !event.metaKey && !event.altKey) {
-      if (next(control, event.shiftKey)) event.preventDefault();
+      if (next(control, event.shiftKey, true)) event.preventDefault();
     } else if (event.ctrlKey && event.altKey && ['ArrowUp', 'ArrowDown'].includes(event.key)) {
       event.preventDefault(); const fields = visible(`[data-field="${control.dataset.field}"]`);
       focus(fields[fields.indexOf(control) + (event.key === 'ArrowUp' ? -1 : 1)]);
