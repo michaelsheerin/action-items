@@ -115,7 +115,7 @@ function summary() {
 function autoSize(control) {
   if (control.tagName !== 'TEXTAREA') return;
   control.style.height = '0px';
-  const height = Math.max(34, control.scrollHeight + 2);
+  const height = Math.max(24, control.scrollHeight + 2);
   control.style.height = `${Math.min(160, height)}px`;
   control.style.overflowY = height > 160 ? 'auto' : 'hidden';
 }
@@ -123,6 +123,7 @@ function updateRowAppearance(row, task) {
   row.dataset.urgency = task.urgency; row.dataset.status = task.status;
   const due = row.querySelector('[data-field="due"]');
   due?.classList.toggle('overdue-date', Boolean(task.due && task.due < localDay()));
+  if (due) due.title = task.due && task.due < localDay() ? 'Overdue' : task.due === localDay() ? 'Today' : '';
   const hint = row.querySelector('.due-hint');
   if (hint) hint.textContent = task.due && task.due < localDay() ? 'Overdue' : task.due === localDay() ? 'Today' : '';
   row.querySelector('[data-field="urgency"]')?.setAttribute('data-value', task.urgency);
