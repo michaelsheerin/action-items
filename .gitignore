@@ -1,0 +1,8 @@
+node_modules/
+private/
+*.xlsx
+*.csv
+*backup*.json
+*migration*.json
+*import*.json
+test-results/
