@@ -33,6 +33,12 @@ thead th{background:#e8edf4;color:#1e293b;font-size:10px;font-weight:700;padding
 .section-remaining .section-row th{border-top:24px solid #fff}
 .section-week .section-row th,.section-remaining .section-row th{background:#17375e;color:#fff;border-bottom-color:#17375e}
 .section-week .section-row .band-description,.section-remaining .section-row .band-description{color:#fff}
+.field-status[data-value="Urgent"]{background-color:#fee2e2;color:#991b1b;font-weight:700}
+.field-status[data-value="Not Urgent"]{background-color:#edf2f7;color:#334155}
+thead th{position:relative;padding-right:10px}
+.column-resizer{position:absolute;right:0;top:0;width:7px;height:100%;cursor:col-resize;touch-action:none;user-select:none;z-index:7;border-right:1px solid #a8b7ca}
+.column-resizer:hover,.column-resizer:focus-visible{background:#2563eb55;outline:1px solid #2563eb;outline-offset:-1px}
+.resizing-columns,.resizing-columns *{cursor:col-resize!important;user-select:none!important}
 .band-description{font-size:10px;color:#475569;margin-left:10px}
 .group-row th{padding:4px 8px;background:#f1f5f9;font-size:10px;font-weight:700;color:#1e293b;border-bottom-color:#d4dee9}
 .group-row th>span:first-child::before{width:5px;height:5px;background:#475569;border-radius:1px;margin-right:6px}.account-goldman th>span:first-child::before{background:#2563eb}.account-uber th>span:first-child::before{background:#172033}.account-claritev th>span:first-child::before{background:#7e22ce}.account-paramount th>span:first-child::before{background:#0369a1}

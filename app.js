@@ -1,5 +1,6 @@
-import {ACCOUNTS, OWNER, URGENCIES, STATUSES, FIELDS, localDay, weekBounds, sectionFor, compareTasks, matches, categoryOptions, safeURL, newTask, parseImport, csvExport} from './core.js';
-import {openStore} from './store.js';
+import {ACCOUNTS, OWNER, STATUSES, FIELDS, localDay, weekBounds, sectionFor, compareTasks, matches, categoryOptions, safeURL, newTask, parseImport, csvExport} from './core.js?v=4';
+import {openStore} from './store.js?v=4';
+import {installColumnSizing} from './columns.js?v=4';
 
 const archived = document.body.dataset.view === 'archive';
 const app = document.querySelector('#app');
@@ -14,8 +15,8 @@ let retryEdits = new Map();
 let currentDay = localDay();
 const drafts = new Map();
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel('action-items-updates') : null;
-const query = {text: '', account: '', urgency: ''};
-const labels = {account: 'Account', category: 'Category', title: 'Action item', due: 'Due date', urgency: 'Urgency', status: 'Status', ticket: 'Ticket ID / link', owner: 'Owner', done: 'Done', notes: 'Notes'};
+const query = {text: '', account: '', status: ''};
+const labels = {account: 'Account', category: 'Category', title: 'Action item', due: 'Due date', status: 'Status', done: 'Done', notes: 'Notes', ticket: 'Ticket ID / link', owner: 'Owner'};
 
 app.innerHTML = `
   <header class="topbar">
@@ -27,10 +28,10 @@ app.innerHTML = `
     <div class="page-heading"><div><div class="eyebrow">WORKSPACE</div><h1>${archived ? 'Completed actions' : 'Action items'}</h1><p>${archived ? 'Your completed work. Uncheck any row to restore.' : 'Edit any field. Changes save as you type.'}</p></div><div id="summary" class="summary"></div></div>
     <div id="error-banner" class="error-banner" role="alert" hidden><span id="error-text"></span><button id="retry-save" class="button" hidden>Retry save</button><button id="emergency-export" class="button">Download backup</button></div>
     <section class="work-surface" aria-label="Action tracker">
-      <div class="toolbar"><div class="search-box"><svg aria-hidden="true" viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><input id="search" type="search" placeholder="Search actions, categories, tickets…" aria-label="Search actions"><kbd>/</kbd></div><div class="filters"><select id="account-filter" aria-label="Filter by account"><option value="">All accounts</option></select><select id="urgency-filter" aria-label="Filter by urgency"><option value="">All urgency</option><option>Urgent</option><option>Not urgent</option></select><button id="clear-filters" class="text-button" hidden>Clear filters</button></div><span id="visible-count" class="visible-count"></span></div>
+      <div class="toolbar"><div class="search-box"><svg aria-hidden="true" viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><input id="search" type="search" placeholder="Search actions, categories, tickets…" aria-label="Search actions"><kbd>/</kbd></div><div class="filters"><select id="account-filter" aria-label="Filter by account"><option value="">All accounts</option></select><select id="status-filter" aria-label="Filter by status"><option value="">All statuses</option>${STATUSES.map(status => `<option>${status}</option>`).join('')}</select><button id="clear-filters" class="text-button" hidden>Clear filters</button></div><span id="visible-count" class="visible-count"></span></div>
       <div id="empty-state" class="empty-state" hidden><img src="./icon.svg" alt="" width="36" height="36"><div><strong>${archived ? 'Your completed work will appear here' : 'Start with your next action'}</strong><p>${archived ? 'Complete a task on the Action items page to move the record here.' : 'Type in a blank row below, or import your workbook records.'}</p></div>${!archived ? '<button id="empty-import" class="button">Import records</button>' : ''}</div>
-      <div class="table-wrap" tabindex="0" aria-label="Editable action table"><table id="actions-table"><caption class="sr-only">${archived ? 'Completed action items' : 'All account action items, grouped by week and account'}</caption><colgroup><col class="col-account"><col class="col-category"><col class="col-title"><col class="col-due"><col class="col-urgency"><col class="col-status"><col class="col-ticket"><col class="col-owner"><col class="col-done"><col class="col-notes"></colgroup><thead><tr>${FIELDS.map(field => `<th scope="col" ${field === 'done' ? 'class="done-heading"' : ''}>${labels[field]}</th>`).join('')}</tr></thead></table></div>
-      <div class="table-footer"><span>${archived ? 'Uncheck Done to return an action to your list.' : 'Blank rows are ready for typing. Tab moves between fields.'}</span><button id="show-more" class="text-button" hidden>Show more completed actions</button><span class="local-label"><span class="local-dot"></span>Stored in this browser</span></div>
+      <div class="table-wrap" tabindex="0" aria-label="Editable action table"><table id="actions-table"><caption class="sr-only">${archived ? 'Completed action items' : 'All account action items, grouped by week and account'}</caption><colgroup>${FIELDS.map(field => `<col class="col-${field}">`).join('')}</colgroup><thead><tr>${FIELDS.map(field => `<th scope="col" data-column="${field}" ${field === 'done' ? 'class="done-heading"' : ''}>${labels[field]}</th>`).join('')}</tr></thead></table></div>
+      <div class="table-footer"><span>${archived ? 'Uncheck Done to return an action to your list.' : 'Blank rows are ready for typing. Tab moves between fields.'} Drag a column edge to resize.</span><button id="reset-widths" class="text-button">Reset widths</button><button id="show-more" class="text-button" hidden>Show more completed actions</button><span class="local-label"><span class="local-dot"></span>Stored in this browser</span></div>
     </section>
     <div class="workspace-footer"><span>One table. All accounts.</span><span>Week starts Monday · <span id="week-label"></span></span></div>
   </main>
@@ -120,13 +121,12 @@ function autoSize(control) {
   control.style.overflowY = height > 160 ? 'auto' : 'hidden';
 }
 function updateRowAppearance(row, task) {
-  row.dataset.urgency = task.urgency; row.dataset.status = task.status;
+  row.dataset.status = task.status;
   const due = row.querySelector('[data-field="due"]');
   due?.classList.toggle('overdue-date', Boolean(task.due && task.due < localDay()));
   if (due) due.title = task.due && task.due < localDay() ? 'Overdue' : task.due === localDay() ? 'Today' : '';
   const hint = row.querySelector('.due-hint');
   if (hint) hint.textContent = task.due && task.due < localDay() ? 'Overdue' : task.due === localDay() ? 'Today' : '';
-  row.querySelector('[data-field="urgency"]')?.setAttribute('data-value', task.urgency);
   row.querySelector('[data-field="status"]')?.setAttribute('data-value', task.status);
 }
 function scheduleRender() {
@@ -145,9 +145,9 @@ function scheduleRender() {
 
 function inputFor(task, field, draft, bucket) {
   let control;
-  if (field === 'account' || field === 'urgency' || field === 'status') {
+  if (field === 'account' || field === 'status') {
     control = document.createElement('select');
-    const values = field === 'account' ? ACCOUNTS : field === 'urgency' ? URGENCIES : STATUSES;
+    const values = field === 'account' ? ACCOUNTS : STATUSES;
     for (const value of values) control.append(new Option(value || 'Unspecified', value));
     control.value = task[field];
   } else if (field === 'done') {
@@ -235,14 +235,14 @@ function bandRow(title, description, className) {
 }
 function draftFor(account, section) {
   const key = `${section}:${account}`;
-  if (!drafts.has(key)) drafts.set(key, newTask(account, section === 'week' ? localDay() : weekBounds().next));
+  if (!drafts.has(key)) drafts.set(key, newTask(account));
   return drafts.get(key);
 }
 function render() {
   const focus = currentFocus();
   const table = el('actions-table'); for (const body of [...table.tBodies]) body.remove();
   const all = [...tasks.values()];
-  const filtered = all.filter(t => t.done === archived && matches(t, query.text, query.account, query.urgency));
+  const filtered = all.filter(t => t.done === archived && matches(t, query.text, query.account, query.status));
   const list = archived ? filtered.sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || '') || compareTasks(a, b)).slice(0, archiveLimit) : filtered;
   const accounts = query.account ? [query.account] : ACCOUNTS;
   const sections = archived ? ['archive'] : ['week', 'remaining'];
@@ -265,7 +265,7 @@ function render() {
   refreshCategories(); summary();
   el('visible-count').textContent = `${filtered.length} ${archived ? 'completed' : 'active'} ${filtered.length === 1 ? 'action' : 'actions'}`;
   el('empty-state').hidden = archived ? filtered.length > 0 : all.some(t => !t.done);
-  el('clear-filters').hidden = !query.text && !query.account && !query.urgency;
+  el('clear-filters').hidden = !query.text && !query.account && !query.status;
   el('show-more').hidden = !archived || filtered.length <= archiveLimit;
   for (const textarea of table.querySelectorAll('textarea')) autoSize(textarea);
   restoreFocus(focus);
@@ -292,7 +292,7 @@ function download(filename, content, type) {
   link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 function exportJSON() {
-  download(`action-items-backup-${localDay()}.json`, JSON.stringify({format: 'action-items', version: 1, exportedAt: new Date().toISOString(), tasks: [...tasks.values()]}, null, 2), 'application/json');
+  download(`action-items-backup-${localDay()}.json`, JSON.stringify({format: 'action-items', version: 2, exportedAt: new Date().toISOString(), tasks: [...tasks.values()]}, null, 2), 'application/json');
 }
 function openData() { el('data-dialog').showModal(); }
 el('data-button').onclick = openData; el('empty-import')?.addEventListener('click', openData);
@@ -321,8 +321,8 @@ el('retry-save').onclick = async () => {
 };
 el('search').oninput = event => { query.text = event.target.value; render(); };
 el('account-filter').onchange = event => { query.account = event.target.value; render(); };
-el('urgency-filter').onchange = event => { query.urgency = event.target.value; render(); };
-el('clear-filters').onclick = () => { query.text = ''; query.account = ''; query.urgency = ''; el('search').value = ''; el('account-filter').value = ''; el('urgency-filter').value = ''; render(); };
+el('status-filter').onchange = event => { query.status = event.target.value; render(); };
+el('clear-filters').onclick = () => { query.text = ''; query.account = ''; query.status = ''; el('search').value = ''; el('account-filter').value = ''; el('status-filter').value = ''; render(); };
 el('show-more').onclick = () => { archiveLimit += 150; render(); };
 document.addEventListener('keydown', event => {
   if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.target.closest('input, textarea, select, dialog')) { event.preventDefault(); el('search').focus(); }
@@ -341,6 +341,13 @@ setInterval(() => { if (localDay() !== currentDay && !document.activeElement?.cl
 
 try {
   store = await openStore();
+  const sizing = installColumnSizing(el('actions-table'), FIELDS, {
+    onChange: widths => store.setting('column-widths', widths),
+    onError: error => toast(error.message),
+    onResize: () => { for (const textarea of el('actions-table').querySelectorAll('textarea')) autoSize(textarea); }
+  });
+  sizing.restore(await store.setting('column-widths'));
+  el('reset-widths').onclick = () => sizing.reset();
   tasks = new Map((await store.all()).map(task => [task.id, task]));
   render(); setSaveState();
 } catch (error) {

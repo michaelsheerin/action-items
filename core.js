@@ -1,8 +1,22 @@
 export const ACCOUNTS = ['Internal', 'Goldman', 'Uber', 'Claritev', 'Paramount'];
 export const OWNER = 'Michael Sheerin';
-export const URGENCIES = ['', 'Urgent', 'Not urgent'];
-export const STATUSES = ['Ready', 'In progress', 'Waiting', 'Scheduled'];
-export const FIELDS = ['account', 'category', 'title', 'due', 'urgency', 'status', 'ticket', 'owner', 'done', 'notes'];
+export const STATUSES = ['Urgent', 'Waiting', 'Scheduled', 'Not Urgent'];
+export const FIELDS = ['account', 'category', 'title', 'due', 'status', 'done', 'notes', 'ticket', 'owner'];
+
+export function upgradeTask(task) {
+  const result = {...task};
+  const legacy = Object.hasOwn(task, 'urgency');
+  if (task.statusSchema === 2 && STATUSES.includes(task.status)) result.status = task.status;
+  else if (['Waiting', 'Scheduled'].includes(task.status)) result.status = task.status;
+  else if (task.status === 'Urgent' || task.urgency === 'Urgent') result.status = 'Urgent';
+  else result.status = 'Not Urgent';
+  if ((legacy || !STATUSES.includes(task.status)) && !result.legacyClassification) {
+    result.legacyClassification = {status: task.status || '', urgency: task.urgency || ''};
+  }
+  delete result.urgency;
+  result.statusSchema = 2;
+  return result;
+}
 
 export function localDay(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -27,18 +41,16 @@ export function sectionFor(task, date = new Date()) {
   return task.due && task.due <= weekBounds(date).end ? 'week' : 'remaining';
 }
 
-const urgencyRank = {'Urgent': 0, 'Not urgent': 1, '': 2};
-const statusRank = {'In progress': 0, 'Ready': 1, 'Waiting': 2, 'Scheduled': 3};
+const statusRank = {'Urgent': 0, 'Waiting': 1, 'Scheduled': 2, 'Not Urgent': 3};
 export function compareTasks(a, b) {
   return (a.due || '9999-12-31').localeCompare(b.due || '9999-12-31')
-    || (urgencyRank[a.urgency] ?? 2) - (urgencyRank[b.urgency] ?? 2)
     || (statusRank[a.status] ?? 4) - (statusRank[b.status] ?? 4)
     || a.title.localeCompare(b.title) || a.id.localeCompare(b.id);
 }
 
-export function matches(task, query = '', account = '', urgency = '') {
+export function matches(task, query = '', account = '', status = '') {
   const text = FIELDS.filter(k => k !== 'done').map(k => task[k] || '').join(' ').toLocaleLowerCase();
-  return (!account || task.account === account) && (!urgency || task.urgency === urgency)
+  return (!account || task.account === account) && (!status || task.status === status)
     && query.toLocaleLowerCase().trim().split(/\s+/).every(word => text.includes(word));
 }
 
@@ -56,7 +68,7 @@ export function safeURL(value) {
 
 export function newTask(account, due = '', id = crypto.randomUUID()) {
   const now = new Date().toISOString();
-  return {id, account, category: '', title: '', due, urgency: 'Not urgent', status: 'Ready', ticket: '', owner: OWNER,
+  return {id, account, category: '', title: '', due, status: 'Not Urgent', statusSchema: 2, ticket: '', owner: OWNER,
     done: false, notes: '', createdAt: now, updatedAt: now, completedAt: null};
 }
 
@@ -76,9 +88,8 @@ export function normalizeTask(raw, index = 0) {
   }
   base.account = account;
   if (base.due && !validDay(base.due)) throw new Error(`Record ${index + 1}: invalid due date.`);
-  base.urgency = base.urgency === 'Not Urgent' ? 'Not urgent' : base.urgency;
-  if (!URGENCIES.includes(base.urgency)) throw new Error(`Record ${index + 1}: invalid urgency.`);
-  if (!STATUSES.includes(base.status)) throw new Error(`Record ${index + 1}: invalid status.`);
+  if (Object.hasOwn(raw, 'urgency') && !['', 'Urgent', 'Not urgent', 'Not Urgent'].includes(raw.urgency)) throw new Error(`Record ${index + 1}: invalid legacy urgency.`);
+  if (![...STATUSES, 'Ready', 'In progress', 'Not urgent', ''].includes(base.status)) throw new Error(`Record ${index + 1}: invalid status.`);
   if (raw.done != null && typeof raw.done !== 'boolean') throw new Error(`Record ${index + 1}: done must be true or false.`);
   base.done = raw.done === true;
   for (const key of ['createdAt', 'updatedAt', 'completedAt']) {
@@ -89,7 +100,8 @@ export function normalizeTask(raw, index = 0) {
   if (base.done && !raw.completedAt) base.completedAt = null;
   if (!base.done) base.completedAt = null;
   if (raw.source && typeof raw.source === 'object') base.source = raw.source;
-  return base;
+  if (raw.legacyClassification && typeof raw.legacyClassification === 'object') base.legacyClassification = raw.legacyClassification;
+  return upgradeTask({...base, ...(Object.hasOwn(raw, 'urgency') ? {urgency: raw.urgency} : {}), statusSchema: raw.statusSchema === 2 ? 2 : 1});
 }
 
 export function parseImport(text) {
@@ -103,7 +115,7 @@ export function parseImport(text) {
 }
 
 export function csvExport(tasks) {
-  const header = ['Account', 'Category', 'Action item', 'Due date', 'Urgency', 'Status', 'Ticket ID / link', 'Owner', 'Complete', 'Notes'];
+  const header = ['Account', 'Category', 'Action item', 'Due date', 'Status', 'Complete', 'Notes', 'Ticket ID / link', 'Owner'];
   const quote = value => {
     let text = String(value ?? '');
     if (/^[\s]*[=+@-]/.test(text) || /^[\t\r]/.test(text)) text = `'${text}`;

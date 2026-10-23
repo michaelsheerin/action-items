@@ -16,9 +16,11 @@ Records save to IndexedDB in the current browser and site origin after each edit
 
 Use Data > Download JSON for a complete backup. Import merges by stable record ID and preserves existing edits by default. Select Update matching records to overwrite existing IDs deliberately. Import validates the full file before opening one transaction. No task records or credentials belong in this repository.
 
-The migration JSON delivered separately contains the workbook's populated tasks, including completed and hidden rows. Import the file once on the published site. Archived rows keep their historical completion date unknown because the workbook did not record completion timestamps. Original sheet names and row numbers stay in each source reference. Legacy Waiting/Scheduled statuses stay separate from urgency; missing urgency stays Unspecified. New actions default to Not urgent, Ready, and owner Michael Sheerin.
+The migration JSON delivered separately contains the workbook's populated tasks, including completed and hidden rows. Import the file once on the published site. Archived rows keep their historical completion date unknown because the workbook did not record completion timestamps. Original sheet names and row numbers stay in each source reference. Status options are Urgent, Waiting, Scheduled, and Not Urgent. Existing records migrate automatically: Waiting and Scheduled take priority, followed by Urgent, then Not Urgent. The original classification stays in backup metadata. Existing due dates stay unchanged. New actions start without a due date, with status Not Urgent and owner Michael Sheerin.
 
-Category suggestions include active and archived categories for the selected account. Add a new category by typing. Ticket entries accept IDs or HTTP/HTTPS links. Notes support multiple lines with Shift+Enter. Tab moves between fields. Press / outside an editable field to focus search.
+Category suggestions include active and archived categories for the selected account. Add a new category by typing. Ticket entries accept IDs or HTTP/HTTPS links. Enter adds a line in Action Item. Notes support multiple lines with Shift+Enter. Tab moves between fields. Press / outside an editable field to focus search.
+
+Drag the right edge of any column header to resize. Double-click an edge to fit the visible records. Focus an edge and use Left/Right arrows for 10-pixel changes, or Shift+Arrow for 50-pixel changes. Widths save in this browser and apply to the action list and archive. Reset widths in the table footer restores the original layout.
 
 ## Scope
 
