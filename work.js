@@ -1,6 +1,6 @@
-import {WORK_ACCOUNTS,today,addDays,weekDays,fiscalQuarter,formatHours,parseHours,units,historyFor,totalsFor,rankActivities,activityLabel,recommendations,validateActivity,validateImport} from './work-core.js?v=10';
-import {openWorkStore} from './work-store.js?v=10';
-import {attachPicker} from './work-picker.js?v=10';
+import {WORK_ACCOUNTS,today,addDays,weekDays,fiscalQuarter,formatHours,parseHours,units,historyFor,totalsFor,rankActivities,activityLabel,recommendations,validateActivity,validateImport} from './work-core.js?v=11';
+import {openWorkStore} from './work-store.js?v=11';
+import {attachPicker} from './work-picker.js?v=11';
 
 const isHours=document.body.dataset.view==='hours', $=id=>document.getElementById(id);
 let store, data={activities:[],entries:[],historical:[]}, days=weekDays(), rowSlots={}, views=[], pickers=[], pending=0, editId=null, generation=0, syncNeeded=false;
@@ -8,13 +8,13 @@ const failed=new Map(), channel='BroadcastChannel' in window?new BroadcastChanne
 const quarter=fiscalQuarter();
 const app=$('app');
 app.innerHTML=`
-<header class="topbar"><a class="brand" href="./" aria-label="Action Items home"><span class="brand-mark" aria-hidden="true">✓</span><span>Action Items<small>Michael Sheerin’s workspace</small></span></a><nav aria-label="Pages"><a href="./">Action items</a><a href="./hours.html" ${isHours?'aria-current="page"':''}>Hours</a><a href="./activities.html" ${!isHours?'aria-current="page"':''}>Activities</a><a href="./archive.html">Archive</a></nav><div class="topbar-right"><span id="work-save" class="save-state" role="status">Loading…</span><button id="work-data" class="button">Data & backup</button><span class="avatar">MS</span></div></header>
-<main class="work-main"><div class="page-heading"><div><div class="eyebrow">YOUR WORKSPACE</div><h1>${isHours?'Weekly hours':'Activities'}</h1><p>${isHours?'Choose an activity. Enter hours by day. Every entry saves as you type.':'Activities by account, with opportunity, stage, and artifact tracking.'}</p></div><div class="heading-right"><div id="work-summary" class="summary"></div><button id="new-activity" class="button primary">+ New activity <kbd>Alt N</kbd></button></div></div>
+<header class="work-header"><nav aria-label="Pages"><a href="./hours.html" ${isHours?'aria-current="page"':''}>Hours</a><a href="./activities.html" ${!isHours?'aria-current="page"':''}>Activities</a><a href="./" class="actions-link">Action items</a></nav><div class="header-tools"><span id="work-save" class="save-state" role="status">Loading…</span><button id="work-data" class="button">Data & backup</button></div></header>
+<main class="work-main"><h1 class="sr-only">${isHours?'Hours':'Activities'}</h1>
 <div id="work-error" class="error-banner" role="alert" hidden><span id="work-error-text"></span><button id="work-retry" class="button">Retry save</button><button id="error-backup" class="button">Download backup</button></div>
 <section class="work-surface" aria-label="${isHours?'Hours entry':'Activity directory'}">
-${isHours?`<div class="toolbar week-toolbar"><div class="week-controls"><button id="previous-week" class="button" aria-label="Previous week">‹</button><label class="week-input-label">Week of <input id="week-date" type="date" aria-label="Week containing date"></label><button id="next-week" class="button" aria-label="Next week">›</button><button id="current-week" class="text-button">This week</button></div><div id="week-heading" class="week-heading"></div><span id="quarter-label" class="visible-count"></span></div>`:`<div class="toolbar"><div class="search-box"><input id="activity-search" type="search" placeholder="Search activities, opportunities, descriptions…" aria-label="Search activities"><kbd>/</kbd></div><span id="activity-count" class="visible-count"></span></div>`}
-<div class="table-wrap work-grid-wrap" tabindex="0" aria-label="${isHours?'Weekly hours grid':'Activities table'}"><table id="work-table" class="${isHours?'hours-grid':'activities-grid'}"><caption class="sr-only">${isHours?'Monday through Sunday hours, grouped by account':'Activities grouped by account'}</caption></table></div>
-<div class="table-footer"><span>${isHours?'<kbd>Tab</kbd> Next day · <kbd>Ctrl Alt ↑ / ↓</kbd> Same day · <kbd>Alt ← / →</kbd> Change week':'Click Edit to update an activity. Artifact checkboxes save immediately.'}</span><span class="local-label"><span class="local-dot"></span>Saved in this browser</span></div></section><div class="workspace-footer"><span id="history-summary"></span><span>${isHours?'Monday–Sunday · Oracle fiscal quarters':'Artifact presence only · No artifact links stored'}</span></div></main>
+${isHours?`<div class="work-toolbar"><div class="week-controls"><button id="previous-week" class="button week-arrow" aria-label="Previous week">‹</button><input id="week-date" type="date" aria-label="Week containing date"><button id="next-week" class="button week-arrow" aria-label="Next week">›</button><button id="current-week" class="text-button">This week</button></div><div id="week-heading" class="sr-only"></div><span id="quarter-label" class="toolbar-detail"></span></div>`:`<div class="work-toolbar"><input id="activity-search" type="search" placeholder="Search activities…" aria-label="Search activities"><span id="activity-count" class="toolbar-detail"></span><button id="new-activity" class="button primary">+ New activity</button></div>`}
+<div class="work-grid-wrap" tabindex="0" aria-label="${isHours?'Weekly hours grid':'Activities table'}"><table id="work-table" class="${isHours?'hours-grid':'activities-grid'}"><caption class="sr-only">${isHours?'Monday through Sunday hours, grouped by account':'Activities grouped by account'}</caption></table></div>
+</section></main>
 <dialog id="activity-dialog"><form id="activity-form"><div class="dialog-heading"><h2 id="activity-dialog-title">New activity</h2><button type="button" id="close-activity" class="icon-button" aria-label="Close activity form">×</button></div><div class="activity-form-grid">
 <label class="dialog-field" for="activity-account">Account<input id="activity-account" name="account" required maxlength="500" type="text"></label>
 <label class="dialog-field" for="activity-oppId">Opp ID<input id="activity-oppId" name="oppId" maxlength="500" type="text"></label>
@@ -23,7 +23,7 @@ ${isHours?`<div class="toolbar week-toolbar"><div class="week-controls"><button 
 <label class="dialog-field wide" for="activity-personalName">Personal Name<input id="activity-personalName" name="personalName" required maxlength="500" type="text"></label>
 <label class="dialog-field wide" for="activity-description">Description<textarea id="activity-description" name="description" rows="4" maxlength="20000"></textarea></label></div>
 <label class="artifact-option"><input type="checkbox" id="activity-artifactAdded"> Artifact(s) added</label><p id="activity-form-error" class="link-error" role="alert" hidden></p><div class="dialog-actions"><button id="cancel-activity" type="button" class="button">Cancel</button><button id="save-activity" type="submit" class="button primary">Save activity</button></div></form></dialog>
-<dialog id="work-data-dialog"><div class="dialog-heading"><h2>Activities and hours</h2><button id="close-work-data" class="icon-button" aria-label="Close data settings">×</button></div><p class="dialog-intro">Records save on this device. JSON backups include all activities, daily entries, and historical balances. Action Items has its own backup.</p><div id="data-overview" class="data-overview"></div><div class="data-action"><div><strong>Back up activities and hours</strong><p>Download your full ledger, including historical totals.</p></div><button id="export-work" class="button primary">Download JSON</button></div><div class="data-action"><div><strong>Import activities and hours</strong><p>Import a migration file or an Activities and Hours backup.</p></div><button id="choose-work-import" class="button">Choose file</button></div><label class="overwrite-option"><input id="overwrite-work" type="checkbox"> Update matching records from the file</label><p class="small-print">Records merge by ID. Reimporting the same file does not add duplicate hours.</p><input id="work-import-file" type="file" accept=".json,application/json" hidden><div id="work-import-result" class="import-result" role="status"></div><details class="history-details"><summary>Historical balances</summary><p class="small-print">These periods contain totals only. Daily entry is locked within these periods to prevent double counting.</p><div id="history-list"></div></details></dialog>
+<dialog id="work-data-dialog"><div class="dialog-heading"><h2>Activities and hours</h2><button id="close-work-data" class="icon-button" aria-label="Close data settings">×</button></div><p class="dialog-intro">Saved in this browser. Backups include activities, daily hours, and historical balances.</p><div id="data-overview" class="data-overview"></div><div id="history-summary" class="small-print"></div><div class="data-action"><div><strong>Back up activities and hours</strong><p>Download your full ledger, including historical totals.</p></div><button id="export-work" class="button primary">Download JSON</button></div><div class="data-action"><div><strong>Import activities and hours</strong><p>Import a migration file or an Activities and Hours backup.</p></div><button id="choose-work-import" class="button">Choose file</button></div><label class="overwrite-option"><input id="overwrite-work" type="checkbox"> Update matching records from the file</label><p class="small-print">Records merge by ID. Reimporting the same file does not add duplicate hours.</p><input id="work-import-file" type="file" accept=".json,application/json" hidden><div id="work-import-result" class="import-result" role="status"></div><details class="history-details"><summary>Historical balances</summary><p class="small-print">These periods contain totals only. Daily entry is locked within these periods to prevent double counting.</p><div id="history-list"></div></details></dialog>
 <div id="work-toast" class="toast" role="status" hidden></div>`;
 
 function node(tag,text,className){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(className)e.className=className;return e;}
@@ -31,7 +31,7 @@ function shortDate(iso,year=false){return new Date(`${iso}T12:00:00`).toLocaleDa
 function accounts(){return [...new Set([...WORK_ACCOUNTS,...data.activities.map(a=>a.account)])].filter(a=>a.toLowerCase()!=='claritev');}
 function activity(id){return data.activities.find(a=>a.id===id);}
 function replaceRecord(key,value){const i=data[key].findIndex(e=>e.id===value.id);if(i<0)data[key].push(value);else data[key][i]=value;}
-function status(){const e=$('work-save'),invalid=$('work-table').querySelector('[aria-invalid="true"]');e.textContent=invalid?'Correct invalid hours':pending?'Saving…':failed.size?'Changes need saving':'Saved on this device';e.className=`save-state ${invalid?'failed':pending?'saving':failed.size?'failed':'saved'}`;}
+function status(){const e=$('work-save'),invalid=$('work-table').querySelector('[aria-invalid="true"]');e.textContent=invalid?'Correct invalid hours':pending?'Saving…':failed.size?'Changes need saving':'Saved';e.className=`save-state ${invalid?'failed':pending?'saving':failed.size?'failed':'saved'}`;}
 function error(message){$('work-error-text').textContent=message;$('work-error').hidden=false;}
 function toast(message){$('work-toast').textContent=message;$('work-toast').hidden=false;setTimeout(()=>{$('work-toast').hidden=true;},6000);}
 async function persist(key,value){
@@ -43,7 +43,7 @@ async function persist(key,value){
 async function saveSlots(){const id=`rows:${days[0]}`, value=Object.fromEntries(Object.entries(rowSlots).map(([a,s])=>[a,[...s]]));try{await store.setting(id,value);}catch(e){error(`Hours are saved separately. Row preferences did not save. ${e.message}`);}}
 function summary(){
   const total=(data.entries.reduce((s,e)=>s+units(e.hours),0)+data.historical.reduce((s,h)=>s+units(h.hours),0))/100;
-  $('work-summary').replaceChildren(node('span',`${data.activities.length} activities`),node('span',`${formatHours(total)} total hours`));
+  
   const historical=data.historical.reduce((s,h)=>s+units(h.hours),0)/100;
   $('history-summary').textContent=`${formatHours(historical)} historical hours included in lifetime totals`;
   $('data-overview').textContent=`${data.activities.length} activities · ${data.entries.filter(e=>e.hours>0).length} daily entries · ${data.historical.length} historical balances · ${formatHours(total)} total hours`;
@@ -53,27 +53,27 @@ function band(account,columns){const tr=node('tr',undefined,'work-account'),th=n
 
 function renderActivities(){
   const query=$('activity-search').value.toLowerCase().trim(),table=$('work-table');table.replaceChildren();
-  const cols=node('colgroup');for(const c of ['opp','stage','kind','name','description','artifact','total','edit'])cols.append(node('col',undefined,`activity-col-${c}`));table.append(cols,header(['Opp ID','Stage','Activity Name','Personal Name','Description','Artifact(s)','Total hours','']));
+  const cols=node('colgroup');for(const c of ['opp','stage','kind','name','description','artifact','edit'])cols.append(node('col',undefined,`activity-col-${c}`));table.append(cols,header(['Opp ID','Stage','Activity Name','Personal Name','Description','Artifact(s)','']));
   let count=0;
   for(const account of accounts()){
     const list=rankActivities(data.activities,data.entries,data.historical,account).filter(a=>!query||[a.account,a.oppId,a.stage,a.activityName,a.personalName,a.description].join(' ').toLowerCase().includes(query));
     if(query&&!list.length)continue;
-    const body=node('tbody');body.append(band(account,8));
+    const body=node('tbody');body.append(band(account,7));
     for(const a of list){count++;const tr=node('tr',undefined,'activity-record');tr.dataset.activity=a.id;
-      for(const key of ['oppId','stage','activityName','personalName','description'])tr.append(node('td',a[key],key==='description'?'activity-description':''));
-      const artifactCell=node('td',undefined,'artifact-cell'),check=node('input');check.type='checkbox';check.checked=a.artifactAdded;check.setAttribute('aria-label',`Artifacts added, ${a.personalName}, ${account}`);check.addEventListener('change',()=>{const updated={...activity(a.id),artifactAdded:check.checked,updatedAt:new Date().toISOString()};replaceRecord('activities',updated);void persist('activities',updated);});artifactCell.append(check);tr.append(artifactCell,node('td',formatHours(a.hours),'numeric'));
+      for(const key of ['oppId','stage','activityName','personalName','description']){const td=node('td');const text=node('span',a[key],key==='description'?'activity-description':'activity-value');text.title=a[key];td.append(text);tr.append(td);}
+      const artifactCell=node('td',undefined,'artifact-cell'),check=node('input');check.type='checkbox';check.checked=a.artifactAdded;check.setAttribute('aria-label',`Artifacts added, ${a.personalName}, ${account}`);check.addEventListener('change',()=>{const updated={...activity(a.id),artifactAdded:check.checked,updatedAt:new Date().toISOString()};replaceRecord('activities',updated);void persist('activities',updated);});artifactCell.append(check);tr.append(artifactCell);
       const editCell=node('td'),edit=node('button','Edit','text-button');edit.setAttribute('aria-label',`Edit ${a.personalName}, ${account}`);edit.onclick=()=>openActivity(a.id);editCell.append(edit);tr.append(editCell);body.append(tr);
     }
-    if(!list.length){const tr=node('tr'),td=node('td','No activities yet. Add an activity to start tracking hours.','work-empty');td.colSpan=8;tr.append(td);body.append(tr);}
+    if(!list.length){const tr=node('tr'),td=node('td','No activities yet. Add an activity to start tracking hours.','work-empty');td.colSpan=7;tr.append(td);body.append(tr);}
     table.append(body);
   }
-  if(query&&!count){const body=node('tbody'),tr=node('tr'),td=node('td','No matching activities.','work-empty');td.colSpan=8;tr.append(td);body.append(tr);table.append(body);}
+  if(query&&!count){const body=node('tbody'),tr=node('tr'),td=node('td','No matching activities.','work-empty');td.colSpan=7;tr.append(td);body.append(tr);table.append(body);}
   $('activity-count').textContent=`${count} ${count===1?'activity':'activities'}`;summary();
 }
 function dayTotals(account){const ids=new Set(data.activities.filter(a=>!account||a.account===account).map(a=>a.id));return days.map(d=>data.entries.filter(e=>ids.has(e.activityId)&&e.date===d).reduce((sum,e)=>sum+units(e.hours),0)/100);}
 function totalsRow(label,account,grand=false){const tr=node('tr',undefined,grand?'hours-grand-total':'hours-account-total');tr.dataset.totalAccount=account||'';const th=node('th',label);th.scope='row';th.colSpan=3;tr.append(th,node('td','','numeric week-sum'));for(let i=0;i<7;i++)tr.append(node('td','','numeric day-sum'));return tr;}
 function updateTotals(){
-  for(const v of views){const totals=v.id?totalsFor(v.id,data.entries,data.historical,days,quarter):null;['total','quarter','week'].forEach((key,i)=>{v.stats[i].textContent=totals?formatHours(totals[key]):'—';});}
+  for(const v of views){const totals=v.id?totalsFor(v.id,data.entries,data.historical,days,quarter):null;['total','quarter','week'].forEach((key,i)=>{v.stats[i].textContent=totals?formatHours(totals[key]):'';});}
   for(const row of $('work-table').querySelectorAll('[data-total-account]')){const sums=dayTotals(row.dataset.totalAccount);row.querySelector('.week-sum').textContent=formatHours(sums.reduce((s,n)=>s+units(n),0)/100);row.querySelectorAll('.day-sum').forEach((td,i)=>{td.textContent=formatHours(sums[i]);td.classList.toggle('over-day',sums[i]>24);});}
   summary();
 }
@@ -87,7 +87,7 @@ function populateHours(v){
 }
 function makeHoursRow(account,index,body){
   const tr=node('tr',undefined,'hours-record'),selectorCell=node('td',undefined,'activity-picker-cell'),selector=node('input');selector.type='text';selector.placeholder='Choose activity…';selector.className='activity-selector';selector.setAttribute('aria-label',`Activity, ${account}, row ${index+1}`);selectorCell.append(selector);tr.append(selectorCell);
-  const stats=Array.from({length:3},()=>node('td','—','numeric activity-stat'));tr.append(...stats);
+  const stats=Array.from({length:3},()=>node('td','','numeric activity-stat'));tr.append(...stats);
   const v={tr,selector,stats,inputs:[],account,index,id:rowSlots[account][index]||''};views.push(v);
   for(let i=0;i<7;i++){
     const td=node('td',undefined,'hours-entry-cell'),input=node('input');input.type='text';input.inputMode='decimal';input.autocomplete='off';input.className='hour-input';input.dataset.day=i;
@@ -110,20 +110,20 @@ function makeHoursRow(account,index,body){
 async function renderWeek(){
   const pass=++generation,week=[...days],saved=await store.setting(`rows:${week[0]}`);if(pass!==generation)return;
   for(const p of pickers)p.destroy();pickers=[];views=[];rowSlots={};
-  $('week-date').value=days[0];$('week-heading').textContent=`${shortDate(days[0])} – ${shortDate(days[6],true)}`;$('quarter-label').textContent=`This quarter: ${quarter.label} · ${shortDate(quarter.start)} – ${shortDate(quarter.end)}`;
+  $('week-date').value=days[0];$('week-heading').textContent=`${shortDate(days[0])} – ${shortDate(days[6],true)}`;$('quarter-label').textContent=quarter.label;$('quarter-label').title=`This quarter: ${shortDate(quarter.start,true)} to ${shortDate(quarter.end,true)}`;
   const table=$('work-table');table.replaceChildren();const cols=node('colgroup');for(const c of ['chooser','stat','stat','stat',...days.map(()=> 'day')])cols.append(node('col',undefined,`hours-col-${c}`));table.append(cols);
-  const head=header(['Activity','Total hours','This quarter','This week',...days.map(d=>`${new Date(`${d}T12:00:00`).toLocaleDateString('en-US',{weekday:'short'})} ${shortDate(d)}`)]);head.querySelectorAll('th')[2].title=`${quarter.label}, ${shortDate(quarter.start,true)} to ${shortDate(quarter.end,true)}`;table.append(head);
+  const head=header(['Activity','Total','Quarter','Week',...days.map(d=>`${new Date(`${d}T12:00:00`).toLocaleDateString('en-US',{weekday:'short'})} ${shortDate(d)}`)]);head.querySelectorAll('th')[2].title=`${quarter.label}, ${shortDate(quarter.start,true)} to ${shortDate(quarter.end,true)}`;head.querySelectorAll('th').forEach((th,i)=>{if(i>=4){const date=days[i-4];th.replaceChildren(node('span',new Date(`${date}T12:00:00`).toLocaleDateString('en-US',{weekday:'short'}),'day-name'),node('span',shortDate(date),'day-date'));}});table.append(head);
   for(const account of accounts()){
     const accountIds=new Set(data.activities.filter(a=>a.account===account).map(a=>a.id)),used=new Set();
     rowSlots[account]=(Array.isArray(saved?.[account])?saved[account]:[]).filter(id=>{if(id==='')return true;if(!accountIds.has(id)||used.has(id))return false;used.add(id);return true;});
     const withHours=rankActivities(data.activities,data.entries,data.historical,account).filter(a=>data.entries.some(e=>e.activityId===a.id&&week.includes(e.date)&&e.hours>0));
-    for(const a of withHours)if(!used.has(a.id)){rowSlots[account].unshift(a.id);used.add(a.id);}
+    const missing=withHours.filter(a=>!used.has(a.id)).map(a=>a.id);rowSlots[account].unshift(...missing);
     while(rowSlots[account].filter(id=>!id).length<3)rowSlots[account].push('');
     const body=node('tbody');body.dataset.account=account;body.append(band(account,11));table.append(body);
     rowSlots[account].forEach((_,i)=>body.append(makeHoursRow(account,i,body)));
-    const addTr=node('tr',undefined,'hours-add-row'),td=node('td'),button=node('button','+ Add another activity','text-button');td.colSpan=11;button.setAttribute('aria-label',`Add another activity, ${account}`);button.onclick=()=>{const index=rowSlots[account].length;rowSlots[account].push('');const row=makeHoursRow(account,index,body);body.insertBefore(row,addTr);void saveSlots();row.querySelector('.activity-selector').focus();};td.append(button);addTr.append(td);body.append(addTr,totalsRow(`${account} total`,account));
+    const addTr=totalsRow('Subtotal',account),th=addTr.querySelector('th'),label=node('span','Subtotal','subtotal-label'),button=node('button','+ Add row','text-button');addTr.classList.add('hours-add-row');th.replaceChildren(button,label);button.setAttribute('aria-label',`Add another activity, ${account}`);button.onclick=()=>{const index=rowSlots[account].length;rowSlots[account].push('');const row=makeHoursRow(account,index,body);body.insertBefore(row,addTr);void saveSlots();row.querySelector('.activity-selector').focus();};body.append(addTr);
   }
-  const foot=node('tfoot');foot.append(totalsRow('All accounts','',true));table.append(foot);updateTotals();
+  const foot=node('tfoot');foot.append(totalsRow('Total','',true));table.append(foot);updateTotals();
 }
 function openActivity(id=null){
   editId=id;const a=activity(id)||{account:WORK_ACCOUNTS[0],oppId:'',stage:'',activityName:'',personalName:'',description:'',artifactAdded:false};
@@ -132,7 +132,7 @@ function openActivity(id=null){
 function download(){const blob=new Blob([JSON.stringify({format:'work-log',version:1,exportedAt:new Date().toISOString(),...data},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=node('a');a.href=url;a.download=`activities-hours-${today()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function historyList(){const list=$('history-list');list.replaceChildren();for(const account of accounts()){const ids=new Set(data.activities.filter(a=>a.account===account).map(a=>a.id)),balances=data.historical.filter(h=>ids.has(h.activityId));if(!balances.length)continue;list.append(node('h3',account));for(const h of balances){const row=node('div',undefined,'history-line');row.append(node('span',`${activity(h.activityId)?.personalName} · ${h.period}`),node('span',`${formatHours(h.hours)} h`));list.append(row);}}if(!data.historical.length)list.append(node('p','No historical balances.'));}
 
-$('new-activity').onclick=()=>openActivity();
+if($('new-activity'))$('new-activity').onclick=()=>openActivity();
 for(const id of ['close-activity','cancel-activity'])$(id).onclick=()=>$('activity-dialog').close();
 $('activity-form').addEventListener('submit',async event=>{
   event.preventDefault();let a;try{const raw={id:editId||crypto.randomUUID()};for(const key of ['account','oppId','stage','activityName','personalName','description'])raw[key]=$(`activity-${key}`).value;raw.artifactAdded=$('activity-artifactAdded').checked;a=validateActivity({...activity(editId),...raw,updatedAt:new Date().toISOString()});}catch(e){$('activity-form-error').textContent=e.message;$('activity-form-error').hidden=false;return;}

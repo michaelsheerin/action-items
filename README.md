@@ -8,7 +8,7 @@ Requires Node.js 20 or newer. Run `node serve.mjs` and open http://127.0.0.1:417
 
 ## Publish on GitHub Pages
 
-Publish `index.html`, `archive.html`, `hours.html`, `activities.html`, `app.js`, `core.js`, `store.js`, `columns.js`, `interactions.js`, `work.js`, `work-core.js`, `work-store.js`, `work-picker.js`, `styles.css`, `icon.svg`, and `.nojekyll` at the repository root. In Settings > Pages, choose Deploy from a branch, then main and /(root). No build command or third-party services are required. The test, server, and documentation files are optional for hosting.
+Publish `index.html`, `archive.html`, `hours.html`, `activities.html`, `app.js`, `core.js`, `store.js`, `columns.js`, `interactions.js`, `work.js`, `work-core.js`, `work-store.js`, `work-picker.js`, `styles.css`, `work.css`, `icon.svg`, and `.nojekyll` at the repository root. In Settings > Pages, choose Deploy from a branch, then main and /(root). No build command or third-party services are required. The test, server, and documentation files are optional for hosting.
 
 ## Records and autosave
 
@@ -36,9 +36,11 @@ Drag the right edge of any column header to resize. Double-click an edge to fit 
 
 ## Activities and hours
 
+Hours and Activities use a separate, minimal white interface with plain navigation, light table dividers, compact account labels, and no summary cards or colored section bars. The Hours toolbar contains week navigation; Activities contains search and a New activity button. Add row sits beside each account subtotal. Backup details and historical totals live under Data & backup. `work.css` is independent of the Action Items stylesheet.
+
 Hours and Activities use a separate IndexedDB database, `sheerin-work-log`, with activities, daily entries, historical balances, and row preferences. Existing Action Items records and settings stay in `sheerin-action-items`. Neither database sends private records to GitHub. Each area has its own JSON backup and import. Keep workbook files, private imports, and downloaded backups outside the public source directory.
 
-Activities shows account sections with Opp ID, Stage, Activity Name, Personal Name, Description, an artifact-presence checkbox, and lifetime hours. Add or edit with the popup form. Account, opportunity, stage, and activity-name text inputs accept new values and offer clickable recommendations ranked by lifetime hours. Opportunity suggestions use the selected account; stage and activity-name suggestions also use the selected opportunity. Artifact URLs are not part of the activity model. Claritev is excluded for now.
+Activities shows account sections with Opp ID, Stage, Activity Name, Personal Name, Description, and an artifact-presence checkbox. Descriptions stay on one line in the directory, with full text available in the edit form. Add or edit with the popup form. Account, opportunity, stage, and activity-name text inputs accept new values and offer clickable recommendations ranked by lifetime hours. Opportunity suggestions use the selected account; stage and activity-name suggestions also use the selected opportunity. Artifact URLs are not part of the activity model. Claritev is excluded for now.
 
 Hours uses Monday through Sunday, with previous/next, a native date selector, and a This week shortcut. Each account starts with three blank activity rows. Activities already containing hours for the chosen week appear automatically, followed by blank entry rows. Add another activity adds a row. Choices rank by lifetime hours and display opportunity, personal name, stage, and five description words. Search also covers full descriptions and activity names. Arrow keys and Enter select an option; Tab moves through day fields. Ctrl+Alt+Up/Down moves along the same day column. Alt+Left/Right changes week. Alt+N opens the activity form.
 
