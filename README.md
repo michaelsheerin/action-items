@@ -8,7 +8,7 @@ Requires Node.js 20 or newer. Run `node serve.mjs` and open http://127.0.0.1:417
 
 ## Publish on GitHub Pages
 
-Publish `index.html`, `archive.html`, `app.js`, `core.js`, `store.js`, `columns.js`, `interactions.js`, `styles.css`, `icon.svg`, and `.nojekyll` at the repository root. In Settings > Pages, choose Deploy from a branch, then main and /(root). No build command or third-party services are required. The test, server, and documentation files are optional for hosting.
+Publish `index.html`, `archive.html`, `hours.html`, `activities.html`, `app.js`, `core.js`, `store.js`, `columns.js`, `interactions.js`, `work.js`, `work-core.js`, `work-store.js`, `work-picker.js`, `styles.css`, `icon.svg`, and `.nojekyll` at the repository root. In Settings > Pages, choose Deploy from a branch, then main and /(root). No build command or third-party services are required. The test, server, and documentation files are optional for hosting.
 
 ## Records and autosave
 
@@ -34,6 +34,16 @@ Edit a ticket hyperlink with the link button in the toolbar, the pencil shown on
 
 Drag the right edge of any column header to resize. Double-click an edge to fit the visible records. Focus an edge and use Left/Right arrows for 10-pixel changes, or Shift+Arrow for 50-pixel changes. Widths save in this browser and apply to the action list and archive. Reset widths in the table footer restores the original layout.
 
-## Scope
+## Activities and hours
 
-This version covers action items and their completed archive. Hours, activity documentation, and quarterly achievement workflows are separate from this app's scope.
+Hours and Activities use a separate IndexedDB database, `sheerin-work-log`, with activities, daily entries, historical balances, and row preferences. Existing Action Items records and settings stay in `sheerin-action-items`. Neither database sends private records to GitHub. Each area has its own JSON backup and import. Keep workbook files, private imports, and downloaded backups outside the public source directory.
+
+Activities shows account sections with Opp ID, Stage, Activity Name, Personal Name, Description, an artifact-presence checkbox, and lifetime hours. Add or edit with the popup form. Account, opportunity, stage, and activity-name text inputs accept new values and offer clickable recommendations ranked by lifetime hours. Opportunity suggestions use the selected account; stage and activity-name suggestions also use the selected opportunity. Artifact URLs are not part of the activity model. Claritev is excluded for now.
+
+Hours uses Monday through Sunday, with previous/next, a native date selector, and a This week shortcut. Each account starts with three blank activity rows. Activities already containing hours for the chosen week appear automatically, followed by blank entry rows. Add another activity adds a row. Choices rank by lifetime hours and display opportunity, personal name, stage, and five description words. Search also covers full descriptions and activity names. Arrow keys and Enter select an option; Tab moves through day fields. Ctrl+Alt+Up/Down moves along the same day column. Alt+Left/Right changes week. Alt+N opens the activity form.
+
+Each activity shows lifetime, current Oracle fiscal quarter, and displayed-week hours. Oracle fiscal years begin June 1. The current quarter is labeled with its fiscal year and date range, independently of the displayed week. Input accepts zero to 24 hours with up to two decimal places. Blank clears the activity/day value; repeated edits replace that value rather than append hours. Row, account/day, and all-account/day sums update immediately. Duplicate activity choices are excluded within an account. Switching a chosen activity retains the former activity's saved hours and keeps a row for any hours in the displayed week.
+
+Historical balances retain their original period and total, without invented daily dates. Lifetime totals include them. Historical quarters contribute to their matching quarter, while annual balances do not get allocated across quarters. Daily inputs are locked inside an activity's historical aggregate period to prevent double counting. Data & backup exposes the historical balance list. Import validates dates, IDs, hours, references, duplicate records, and historical overlaps before one atomic transaction. Stable IDs make repeated imports idempotent; existing corrections are preserved unless Update matching records is selected.
+
+Browser tests cover recommendations, keyboard selection, row addition, immediate sums, daily persistence, week changes, activity editing, long descriptions, artifact toggles, historical locks, and repeat imports. Run `node --test core.test.js interactions.test.js work.test.js` for the automated suite.
