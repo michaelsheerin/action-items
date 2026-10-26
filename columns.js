@@ -1,12 +1,13 @@
 const MINIMUM = {account: 64, category: 64, title: 80, due: 86, status: 84, done: 36, notes: 80, ticket: 64, owner: 64};
 const MAXIMUM = 2000;
 
-export function installColumnSizing(table, fields, {onChange, onResize, onError}) {
+export function installColumnSizing(table, fields, {onChange, onResize, onError, minimums = {}}) {
   const headers = [...table.querySelectorAll('thead th')];
   const columns = [...table.querySelectorAll('colgroup col')];
   let widths = null;
   let queued = false;
-  const clamp = (field, value) => Math.round(Math.max(MINIMUM[field] || 40, Math.min(MAXIMUM, value)));
+  const minimum = field => minimums[field] || MINIMUM[field] || 40;
+  const clamp = (field, value) => Math.round(Math.max(minimum(field), Math.min(MAXIMUM, value)));
 
   function resizeText() {
     if (queued) return;
@@ -42,7 +43,7 @@ export function installColumnSizing(table, fields, {onChange, onResize, onError}
     for (const input of table.querySelectorAll(`[data-field="${field}"]`)) {
       if (!input.getClientRects().length) continue;
       context.font = getComputedStyle(input).font;
-      for (const line of String(input.value || '').split('\n')) width = Math.max(width, context.measureText(line).width + (field === 'due' ? 36 : 26));
+      for (const line of String(input.value ?? input.textContent ?? '').split('\n')) width = Math.max(width, context.measureText(line).width + (field === 'due' ? 36 : 26));
     }
     setWidth(field, Math.min(800, width)); persist();
   }
@@ -51,8 +52,8 @@ export function installColumnSizing(table, fields, {onChange, onResize, onError}
     const handle = document.createElement('span');
     handle.className = 'column-resizer'; handle.tabIndex = 0;
     handle.setAttribute('role', 'separator'); handle.setAttribute('aria-orientation', 'vertical');
-    handle.setAttribute('aria-label', `Resize ${headers[index].textContent} column`);
-    handle.setAttribute('aria-valuemin', MINIMUM[field] || 40); handle.setAttribute('aria-valuemax', MAXIMUM);
+    handle.setAttribute('aria-label', `Resize ${headers[index].textContent || field} column`);
+    handle.setAttribute('aria-valuemin', minimum(field)); handle.setAttribute('aria-valuemax', MAXIMUM);
     handle.title = 'Drag to resize. Double-click to fit. Arrow keys adjust the width.';
     let drag = null;
     function finish(event, cancel = false) {
@@ -87,8 +88,10 @@ export function installColumnSizing(table, fields, {onChange, onResize, onError}
     headers[index].append(handle);
     handle.setAttribute('aria-valuenow', Math.round(headers[index].getBoundingClientRect().width));
   });
-  window.addEventListener('resize', () => { syncAria(); resizeText(); });
+  const windowResize = () => { syncAria(); resizeText(); };
+  window.addEventListener('resize', windowResize);
   return {
+    destroy() { window.removeEventListener('resize', windowResize); },
     restore(saved) {
       if (!saved || typeof saved !== 'object' || !fields.every(field => Number.isFinite(saved[field]))) return;
       widths = Object.fromEntries(fields.map(field => [field, clamp(field, saved[field])])); apply();

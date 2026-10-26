@@ -1,14 +1,17 @@
-import {WORK_ACCOUNTS,today,addDays,weekDays,fiscalQuarter,formatHours,parseHours,units,historyFor,totalsFor,rankActivities,activityLabel,recommendations,validateActivity,validateImport} from './work-core.js?v=11';
-import {openWorkStore} from './work-store.js?v=11';
-import {attachPicker} from './work-picker.js?v=11';
+import {WORK_ACCOUNTS,today,addDays,weekDays,fiscalQuarter,formatHours,parseHours,units,historyFor,totalsFor,rankActivities,activityLabel,recommendations,validateActivity,validateImport} from './work-core.js?v=12';
+import {openWorkStore} from './work-store.js?v=12';
+import {attachPicker} from './work-picker.js?v=12';
+import {installColumnSizing} from './columns.js?v=12';
 
 const isHours=document.body.dataset.view==='hours', $=id=>document.getElementById(id);
 let store, data={activities:[],entries:[],historical:[]}, days=weekDays(), rowSlots={}, views=[], pickers=[], pending=0, editId=null, generation=0, syncNeeded=false;
 const failed=new Map(), channel='BroadcastChannel' in window?new BroadcastChannel('sheerin-work-log-updates'):null;
 const quarter=fiscalQuarter();
+const widthSetting=isHours?'columns:hours':'columns:activities';
+let columnSizing, savedWidths=null;
 const app=$('app');
 app.innerHTML=`
-<header class="work-header"><nav aria-label="Pages"><a href="./hours.html" ${isHours?'aria-current="page"':''}>Hours</a><a href="./activities.html" ${!isHours?'aria-current="page"':''}>Activities</a><a href="./" class="actions-link">Action items</a></nav><div class="header-tools"><span id="work-save" class="save-state" role="status">Loading…</span><button id="work-data" class="button">Data & backup</button></div></header>
+<header class="topbar"><a class="brand" href="./" aria-label="Action Items home"><span class="brand-mark" aria-hidden="true">✓</span><span>Action Items<small>Michael Sheerin’s workspace</small></span></a><nav aria-label="Pages"><a href="./">Action items</a><a href="./hours.html" ${isHours?'aria-current="page"':''}>Hours</a><a href="./activities.html" ${!isHours?'aria-current="page"':''}>Activities</a><a href="./archive.html">Archive</a></nav><div class="topbar-right"><span id="work-save" class="save-state" role="status">Loading…</span><button id="work-data" class="button">Data & backup</button><span class="avatar" title="Michael Sheerin">MS</span></div></header>
 <main class="work-main"><h1 class="sr-only">${isHours?'Hours':'Activities'}</h1>
 <div id="work-error" class="error-banner" role="alert" hidden><span id="work-error-text"></span><button id="work-retry" class="button">Retry save</button><button id="error-backup" class="button">Download backup</button></div>
 <section class="work-surface" aria-label="${isHours?'Hours entry':'Activity directory'}">
@@ -23,7 +26,7 @@ ${isHours?`<div class="work-toolbar"><div class="week-controls"><button id="prev
 <label class="dialog-field wide" for="activity-personalName">Personal Name<input id="activity-personalName" name="personalName" required maxlength="500" type="text"></label>
 <label class="dialog-field wide" for="activity-description">Description<textarea id="activity-description" name="description" rows="4" maxlength="20000"></textarea></label></div>
 <label class="artifact-option"><input type="checkbox" id="activity-artifactAdded"> Artifact(s) added</label><p id="activity-form-error" class="link-error" role="alert" hidden></p><div class="dialog-actions"><button id="cancel-activity" type="button" class="button">Cancel</button><button id="save-activity" type="submit" class="button primary">Save activity</button></div></form></dialog>
-<dialog id="work-data-dialog"><div class="dialog-heading"><h2>Activities and hours</h2><button id="close-work-data" class="icon-button" aria-label="Close data settings">×</button></div><p class="dialog-intro">Saved in this browser. Backups include activities, daily hours, and historical balances.</p><div id="data-overview" class="data-overview"></div><div id="history-summary" class="small-print"></div><div class="data-action"><div><strong>Back up activities and hours</strong><p>Download your full ledger, including historical totals.</p></div><button id="export-work" class="button primary">Download JSON</button></div><div class="data-action"><div><strong>Import activities and hours</strong><p>Import a migration file or an Activities and Hours backup.</p></div><button id="choose-work-import" class="button">Choose file</button></div><label class="overwrite-option"><input id="overwrite-work" type="checkbox"> Update matching records from the file</label><p class="small-print">Records merge by ID. Reimporting the same file does not add duplicate hours.</p><input id="work-import-file" type="file" accept=".json,application/json" hidden><div id="work-import-result" class="import-result" role="status"></div><details class="history-details"><summary>Historical balances</summary><p class="small-print">These periods contain totals only. Daily entry is locked within these periods to prevent double counting.</p><div id="history-list"></div></details></dialog>
+<dialog id="work-data-dialog"><div class="dialog-heading"><h2>Activities and hours</h2><button id="close-work-data" class="icon-button" aria-label="Close data settings">×</button></div><p class="dialog-intro">Saved in this browser. Backups include activities, daily hours, and historical balances.</p><div id="data-overview" class="data-overview"></div><div id="history-summary" class="small-print"></div><div class="data-action"><div><strong>Back up activities and hours</strong><p>Download your full ledger, including historical totals.</p></div><button id="export-work" class="button primary">Download JSON</button></div><div class="data-action"><div><strong>Import activities and hours</strong><p>Import a migration file or an Activities and Hours backup.</p></div><button id="choose-work-import" class="button">Choose file</button></div><label class="overwrite-option"><input id="overwrite-work" type="checkbox"> Update matching records from the file</label><p class="small-print">Records merge by ID. Reimporting the same file does not add duplicate hours.</p><input id="work-import-file" type="file" accept=".json,application/json" hidden><div id="work-import-result" class="import-result" role="status"></div><div class="data-action"><div><strong>Column widths</strong><p>Drag a header edge to resize. Double-click to fit.</p></div><button id="reset-work-widths" class="button">Reset widths</button></div><details class="history-details"><summary>Historical balances</summary><p class="small-print">These periods contain totals only. Daily entry is locked within these periods to prevent double counting.</p><div id="history-list"></div></details></dialog>
 <div id="work-toast" class="toast" role="status" hidden></div>`;
 
 function node(tag,text,className){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(className)e.className=className;return e;}
@@ -48,11 +51,21 @@ function summary(){
   $('history-summary').textContent=`${formatHours(historical)} historical hours included in lifetime totals`;
   $('data-overview').textContent=`${data.activities.length} activities · ${data.entries.filter(e=>e.hours>0).length} daily entries · ${data.historical.length} historical balances · ${formatHours(total)} total hours`;
 }
+function sizeColumns(fields){
+  columnSizing?.destroy();
+  columnSizing=installColumnSizing($('work-table'),fields,{
+    minimums:{activity:220,total:55,quarter:60,week:65,mon:45,tue:45,wed:45,thu:45,fri:45,sat:45,sun:45,oppId:65,stage:80,activityName:100,personalName:100,description:120,artifactAdded:65,edit:45},
+    onChange:widths=>{savedWidths=widths;return store.setting(widthSetting,widths);},
+    onResize:()=>pickers.forEach(p=>p.refresh()),
+    onError:e=>error(`Column widths did not save. ${e.message}`)
+  });
+  columnSizing.restore(savedWidths);
+}
 function header(labels){const head=node('thead'),tr=node('tr');for(const label of labels) {const th=node('th',label);th.scope='col';tr.append(th);}head.append(tr);return head;}
 function band(account,columns){const tr=node('tr',undefined,'work-account'),th=node('th',account);th.colSpan=columns;th.scope='rowgroup';tr.append(th);return tr;}
 
 function renderActivities(){
-  const query=$('activity-search').value.toLowerCase().trim(),table=$('work-table');table.replaceChildren();
+  const query=$('activity-search').value.toLowerCase().trim(),table=$('work-table');columnSizing?.destroy();table.replaceChildren();
   const cols=node('colgroup');for(const c of ['opp','stage','kind','name','description','artifact','edit'])cols.append(node('col',undefined,`activity-col-${c}`));table.append(cols,header(['Opp ID','Stage','Activity Name','Personal Name','Description','Artifact(s)','']));
   let count=0;
   for(const account of accounts()){
@@ -60,18 +73,18 @@ function renderActivities(){
     if(query&&!list.length)continue;
     const body=node('tbody');body.append(band(account,7));
     for(const a of list){count++;const tr=node('tr',undefined,'activity-record');tr.dataset.activity=a.id;
-      for(const key of ['oppId','stage','activityName','personalName','description']){const td=node('td');const text=node('span',a[key],key==='description'?'activity-description':'activity-value');text.title=a[key];td.append(text);tr.append(td);}
-      const artifactCell=node('td',undefined,'artifact-cell'),check=node('input');check.type='checkbox';check.checked=a.artifactAdded;check.setAttribute('aria-label',`Artifacts added, ${a.personalName}, ${account}`);check.addEventListener('change',()=>{const updated={...activity(a.id),artifactAdded:check.checked,updatedAt:new Date().toISOString()};replaceRecord('activities',updated);void persist('activities',updated);});artifactCell.append(check);tr.append(artifactCell);
+      for(const key of ['oppId','stage','activityName','personalName','description']){const td=node('td');td.dataset.field=key;const text=node('span',a[key],key==='description'?'activity-description':'activity-value');text.title=a[key];td.append(text);tr.append(td);}
+      const artifactCell=node('td',undefined,'artifact-cell'),check=node('input');artifactCell.dataset.field='artifactAdded';check.type='checkbox';check.checked=a.artifactAdded;check.setAttribute('aria-label',`Artifacts added, ${a.personalName}, ${account}`);check.addEventListener('change',()=>{const updated={...activity(a.id),artifactAdded:check.checked,updatedAt:new Date().toISOString()};replaceRecord('activities',updated);void persist('activities',updated);});artifactCell.append(check);tr.append(artifactCell);
       const editCell=node('td'),edit=node('button','Edit','text-button');edit.setAttribute('aria-label',`Edit ${a.personalName}, ${account}`);edit.onclick=()=>openActivity(a.id);editCell.append(edit);tr.append(editCell);body.append(tr);
     }
     if(!list.length){const tr=node('tr'),td=node('td','No activities yet. Add an activity to start tracking hours.','work-empty');td.colSpan=7;tr.append(td);body.append(tr);}
     table.append(body);
   }
   if(query&&!count){const body=node('tbody'),tr=node('tr'),td=node('td','No matching activities.','work-empty');td.colSpan=7;tr.append(td);body.append(tr);table.append(body);}
-  $('activity-count').textContent=`${count} ${count===1?'activity':'activities'}`;summary();
+  $('activity-count').textContent=`${count} ${count===1?'activity':'activities'}`;sizeColumns(['oppId','stage','activityName','personalName','description','artifactAdded','edit']);summary();
 }
 function dayTotals(account){const ids=new Set(data.activities.filter(a=>!account||a.account===account).map(a=>a.id));return days.map(d=>data.entries.filter(e=>ids.has(e.activityId)&&e.date===d).reduce((sum,e)=>sum+units(e.hours),0)/100);}
-function totalsRow(label,account,grand=false){const tr=node('tr',undefined,grand?'hours-grand-total':'hours-account-total');tr.dataset.totalAccount=account||'';const th=node('th',label);th.scope='row';th.colSpan=3;tr.append(th,node('td','','numeric week-sum'));for(let i=0;i<7;i++)tr.append(node('td','','numeric day-sum'));return tr;}
+function totalsRow(label,account,grand=false){const tr=node('tr',undefined,grand?'hours-grand-total':'hours-account-total');tr.dataset.totalAccount=account||'';const th=node('th',label);th.scope='row';th.colSpan=3;tr.append(th);for(let i=0;i<7;i++)tr.append(node('td','','numeric day-sum'));tr.append(node('td','','numeric week-sum'));return tr;}
 function updateTotals(){
   for(const v of views){const totals=v.id?totalsFor(v.id,data.entries,data.historical,days,quarter):null;['total','quarter','week'].forEach((key,i)=>{v.stats[i].textContent=totals?formatHours(totals[key]):'';});}
   for(const row of $('work-table').querySelectorAll('[data-total-account]')){const sums=dayTotals(row.dataset.totalAccount);row.querySelector('.week-sum').textContent=formatHours(sums.reduce((s,n)=>s+units(n),0)/100);row.querySelectorAll('.day-sum').forEach((td,i)=>{td.textContent=formatHours(sums[i]);td.classList.toggle('over-day',sums[i]>24);});}
@@ -86,17 +99,18 @@ function populateHours(v){
   updateTotals();
 }
 function makeHoursRow(account,index,body){
-  const tr=node('tr',undefined,'hours-record'),selectorCell=node('td',undefined,'activity-picker-cell'),selector=node('input');selector.type='text';selector.placeholder='Choose activity…';selector.className='activity-selector';selector.setAttribute('aria-label',`Activity, ${account}, row ${index+1}`);selectorCell.append(selector);tr.append(selectorCell);
-  const stats=Array.from({length:3},()=>node('td','','numeric activity-stat'));tr.append(...stats);
+  const tr=node('tr',undefined,'hours-record'),selectorCell=node('td',undefined,'activity-picker-cell'),selector=node('input');selector.type='text';selector.placeholder='Choose activity…';selector.className='activity-selector';selector.dataset.field='activity';selector.setAttribute('aria-label',`Activity, ${account}, row ${index+1}`);selectorCell.append(selector);tr.append(selectorCell);
+  const stats=['total','quarter','week'].map(field=>{const td=node('td','','numeric activity-stat');td.dataset.field=field;return td;});tr.append(...stats.slice(0,2));
   const v={tr,selector,stats,inputs:[],account,index,id:rowSlots[account][index]||''};views.push(v);
   for(let i=0;i<7;i++){
-    const td=node('td',undefined,'hours-entry-cell'),input=node('input');input.type='text';input.inputMode='decimal';input.autocomplete='off';input.className='hour-input';input.dataset.day=i;
+    const td=node('td',undefined,'hours-entry-cell'),input=node('input');input.type='text';input.inputMode='decimal';input.autocomplete='off';input.className='hour-input';input.dataset.day=i;input.dataset.field=['mon','tue','wed','thu','fri','sat','sun'][i];
     input.addEventListener('input',()=>{
       if(!v.id)return;let hours;try{hours=parseHours(input.value);input.setCustomValidity('');input.removeAttribute('aria-invalid');}catch(e){input.setCustomValidity(e.message);input.setAttribute('aria-invalid','true');$('work-save').textContent=e.message;return;}
       const entry={id:`${v.id}:${days[i]}`,activityId:v.id,date:days[i],hours,updatedAt:new Date().toISOString()};replaceRecord('entries',entry);updateTotals();void persist('entries',entry);
     });
     input.addEventListener('blur',()=>{if(!input.checkValidity()){input.reportValidity();}else status();});td.append(input);tr.append(td);v.inputs.push(input);
   }
+  tr.append(stats[2]);
   pickers.push(attachPicker(selector,{options:()=>rankActivities(data.activities,data.entries,data.historical,account).filter(a=>a.id===v.id||!rowSlots[account].includes(a.id)).map(a=>({id:a.id,label:activityLabel(a),search:[activityLabel(a),a.activityName,a.description].join(' '),hours:a.hours})),onSelect:item=>{
     if(!item){selector.value=v.id?activityLabel(activity(v.id)):'';return;}
     if(item.id===v.id)return;
@@ -111,8 +125,8 @@ async function renderWeek(){
   const pass=++generation,week=[...days],saved=await store.setting(`rows:${week[0]}`);if(pass!==generation)return;
   for(const p of pickers)p.destroy();pickers=[];views=[];rowSlots={};
   $('week-date').value=days[0];$('week-heading').textContent=`${shortDate(days[0])} – ${shortDate(days[6],true)}`;$('quarter-label').textContent=quarter.label;$('quarter-label').title=`This quarter: ${shortDate(quarter.start,true)} to ${shortDate(quarter.end,true)}`;
-  const table=$('work-table');table.replaceChildren();const cols=node('colgroup');for(const c of ['chooser','stat','stat','stat',...days.map(()=> 'day')])cols.append(node('col',undefined,`hours-col-${c}`));table.append(cols);
-  const head=header(['Activity','Total','Quarter','Week',...days.map(d=>`${new Date(`${d}T12:00:00`).toLocaleDateString('en-US',{weekday:'short'})} ${shortDate(d)}`)]);head.querySelectorAll('th')[2].title=`${quarter.label}, ${shortDate(quarter.start,true)} to ${shortDate(quarter.end,true)}`;head.querySelectorAll('th').forEach((th,i)=>{if(i>=4){const date=days[i-4];th.replaceChildren(node('span',new Date(`${date}T12:00:00`).toLocaleDateString('en-US',{weekday:'short'}),'day-name'),node('span',shortDate(date),'day-date'));}});table.append(head);
+  const table=$('work-table');columnSizing?.destroy();table.replaceChildren();const cols=node('colgroup');for(const c of ['chooser','stat','stat',...days.map(()=> 'day'),'stat'])cols.append(node('col',undefined,`hours-col-${c}`));table.append(cols);
+  const head=header(['Activity','Total','Quarter',...days.map(d=>`${new Date(`${d}T12:00:00`).toLocaleDateString('en-US',{weekday:'short'})} ${shortDate(d)}`),'This week']);head.querySelectorAll('th')[2].title=`${quarter.label}, ${shortDate(quarter.start,true)} to ${shortDate(quarter.end,true)}`;head.querySelectorAll('th').forEach((th,i)=>{if(i>=3&&i<10){const date=days[i-3];th.replaceChildren(node('span',new Date(`${date}T12:00:00`).toLocaleDateString('en-US',{weekday:'short'}),'day-name'),node('span',shortDate(date),'day-date'));}});table.append(head);
   for(const account of accounts()){
     const accountIds=new Set(data.activities.filter(a=>a.account===account).map(a=>a.id)),used=new Set();
     rowSlots[account]=(Array.isArray(saved?.[account])?saved[account]:[]).filter(id=>{if(id==='')return true;if(!accountIds.has(id)||used.has(id))return false;used.add(id);return true;});
@@ -123,7 +137,7 @@ async function renderWeek(){
     rowSlots[account].forEach((_,i)=>body.append(makeHoursRow(account,i,body)));
     const addTr=totalsRow('Subtotal',account),th=addTr.querySelector('th'),label=node('span','Subtotal','subtotal-label'),button=node('button','+ Add row','text-button');addTr.classList.add('hours-add-row');th.replaceChildren(button,label);button.setAttribute('aria-label',`Add another activity, ${account}`);button.onclick=()=>{const index=rowSlots[account].length;rowSlots[account].push('');const row=makeHoursRow(account,index,body);body.insertBefore(row,addTr);void saveSlots();row.querySelector('.activity-selector').focus();};body.append(addTr);
   }
-  const foot=node('tfoot');foot.append(totalsRow('Total','',true));table.append(foot);updateTotals();
+  const foot=node('tfoot');foot.append(totalsRow('Total','',true));table.append(foot);sizeColumns(['activity','total','quarter','mon','tue','wed','thu','fri','sat','sun','week']);updateTotals();
 }
 function openActivity(id=null){
   editId=id;const a=activity(id)||{account:WORK_ACCOUNTS[0],oppId:'',stage:'',activityName:'',personalName:'',description:'',artifactAdded:false};
@@ -161,9 +175,10 @@ $('work-import-file').onchange=async()=>{
   try{if(file.size>20_000_000)throw new Error('File exceeds 20 MB.');const raw=JSON.parse(await file.text()),overwrite=$('overwrite-work').checked;const parsed=validateImport(raw,data,overwrite);const counts=await store.import(parsed,overwrite);data=await store.all();summary();historyList();result.textContent=`Imported ${counts.activities} activities, ${counts.entries} daily entries, ${counts.historical} historical balances. ${counts.activities+counts.entries+counts.historical===0?'No new records.':''}`;if(isHours)await renderWeek();else renderActivities();channel?.postMessage({import:true});}
   catch(e){result.textContent=`Import stopped: ${e.message}`;}finally{$('choose-work-import').disabled=false;$('work-import-file').value='';}
 };
+$('reset-work-widths').onclick=()=>columnSizing?.reset();
 $('work-retry').onclick=async()=>{for(const {key,value} of [...failed.values()])await persist(key,value);};
 window.addEventListener('beforeunload',event=>{if(pending||failed.size||$('work-table').querySelector('[aria-invalid="true"]')){event.preventDefault();event.returnValue='';}});
 async function sync(){if(pending||failed.size||document.activeElement?.matches('.hour-input,.activity-selector')||document.querySelector('dialog[open]')){syncNeeded=true;return;}data=await store.all();syncNeeded=false;if(isHours)await renderWeek();else renderActivities();}
 channel?.addEventListener('message',()=>void sync());
 document.addEventListener('focusout',()=>{setTimeout(()=>{if(syncNeeded)void sync();},0);});
-try{store=await openWorkStore();data=await store.all();if(isHours)await renderWeek();else renderActivities();status();}catch(e){error(`Unable to open saved records. ${e.message}`);$('work-save').textContent='Storage unavailable';}
+try{store=await openWorkStore();[data,savedWidths]=await Promise.all([store.all(),store.setting(widthSetting)]);if(isHours)await renderWeek();else renderActivities();status();}catch(e){error(`Unable to open saved records. ${e.message}`);$('work-save').textContent='Storage unavailable';}

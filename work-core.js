@@ -29,7 +29,7 @@ export function totalsFor(activityId, entries, historical, days, quarter = fisca
 export function rankActivities(activities, entries, historical, account) {
   return activities.filter(a=>!account || a.account===account).map(a=>({...a,hours:totalsFor(a.id,entries,historical,[]).total})).sort((a,b)=>b.hours-a.hours || a.personalName.localeCompare(b.personalName) || a.oppId.localeCompare(b.oppId));
 }
-export function activityLabel(a) { const words = a.description.trim().split(/\s+/).filter(Boolean); return [a.oppId || 'No Opp ID',a.personalName,a.stage || 'No stage',words.slice(0,5).join(' ')+(words.length>5?'…':'')].join(' | '); }
+export function activityLabel(a) { return [a.oppId || 'No Opp ID',a.personalName,a.stage || 'No stage',a.description.trim().replace(/\s+/g,' ')].join(' | '); }
 export function recommendations(field, activities, entries, historical, context={}) {
   const scores = new Map();
   for(const a of activities) {
