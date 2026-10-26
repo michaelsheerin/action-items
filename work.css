@@ -134,3 +134,29 @@ h2 { font-size: 17px; font-weight: 500; margin: 0; }
 @media(max-width:1100px) { .topbar { gap: 20px; }.topbar .brand small { display: none; }.topbar-right { gap: 6px; } }
 @media(max-width:780px) { .topbar { flex-wrap: wrap; gap: 10px 20px; padding: 8px 12px; }.topbar .avatar { display: none; }.topbar .save-state { margin: 0; } }
 @media(max-width:500px) { .topbar { gap: 8px 10px; }.topbar .brand { flex: 1; }.topbar nav { order: 3; width: 100%; justify-content: center; }.topbar .save-state { font-size: 9px; }.topbar .button { font-size: 10px; padding: 5px 8px; }#activity-count { display: none; }#activity-search { flex: 1; min-width: 0; max-width: none; } }
+/* The quarterly report follows the entry grid in the page's normal flow. */
+body[data-view="hours"] #app { height: auto; min-height: 100dvh; }
+body[data-view="hours"] .topbar { position: sticky; top: 0; z-index: 20; }
+body[data-view="hours"] .work-surface { flex: none; }
+body[data-view="hours"] .work-grid-wrap { flex: none; min-height: 210px; max-height: calc(100dvh - 180px); }
+.quarter-section { flex: none; margin-top: 14px; border-top: 1px solid #d8dde3; scroll-margin-top: 68px; }
+.quarter-section > summary { padding: 13px 1px; color: #344b68; font-size: 13px; cursor: pointer; }
+.quarter-section > summary::marker { color: #647892; }
+.quarter-period { float: right; padding-top: 2px; color: #7d8794; font-size: 11px; }
+.quarter-caption { margin: 0 0 9px; font-size: 11px; color: #748090; }
+.quarter-grid-wrap { overflow: auto; max-height: 65dvh; border-top: 1px solid #c9d2df; border-bottom: 1px solid #d8dde3; scrollbar-width: thin; scrollbar-color: #bdc5cf #fff; }
+.quarter-grid thead th { padding: 7px 8px; }
+.quarter-grid td { padding: 7px 8px; font-size: 11px; }
+.quarter-grid .work-account th { padding: 10px 8px 7px; }
+.quarter-activity { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.quarter-grid .quarter-record td:first-child { position: sticky; left: 0; z-index: 1; background: #fff; }
+.quarter-grid thead th:first-child { position: sticky; left: 0; z-index: 8; }
+.quarter-row-total { color: #3f526c; border-left: 1px solid #d8dde3; }
+.quarter-total td,.quarter-total th { padding: 9px 8px; color: #313b49; background: #f1f3f6; font-size: 11px; font-weight: 500; border-top: 1px solid #cbd1d9; border-bottom: 0; }
+.quarter-total th { position: sticky; left: 0; z-index: 5; text-align: left; }
+.quarter-metrics { display: flex; align-items: baseline; flex-wrap: wrap; gap: 14px 30px; padding: 15px 0 9px; color: #647287; font-size: 11px; }
+.quarter-metric { display: flex; align-items: baseline; gap: 10px; }
+.quarter-metric-value { color: #243a55; font-size: 17px; font-variant-numeric: tabular-nums; }
+.quarter-target-formula { margin-left: auto; color: #7d8794; font-size: 11px; }
+@media(max-width:700px) { .quarter-target-formula { margin-left: 0; flex-basis: 100%; }.quarter-period { font-size: 10px; }.quarter-metrics { gap: 10px 20px; } }
+@media(max-width:500px) { .quarter-section { scroll-margin-top: 112px; }body[data-view="hours"] .work-grid-wrap { max-height: calc(100dvh - 235px); } }

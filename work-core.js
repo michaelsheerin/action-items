@@ -30,6 +30,31 @@ export function rankActivities(activities, entries, historical, account) {
   return activities.filter(a=>!account || a.account===account).map(a=>({...a,hours:totalsFor(a.id,entries,historical,[]).total})).sort((a,b)=>b.hours-a.hours || a.personalName.localeCompare(b.personalName) || a.oppId.localeCompare(b.oppId));
 }
 export function activityLabel(a) { return [a.oppId || 'No Opp ID',a.personalName,a.stage || 'No stage',a.description.trim().replace(/\s+/g,' ')].join(' | '); }
+export function quarterProgress(activities, entries, historical, asOf = today()) {
+  const quarter = fiscalQuarter(asOf), weeks = [];
+  for(let monday = weekDays(quarter.start)[0]; monday <= asOf; monday = addDays(monday,7)) {
+    weeks.push({start:monday,from:monday<quarter.start?quarter.start:monday,to:addDays(monday,6)>asOf?asOf:addDays(monday,6)});
+  }
+  const weekIndex=new Map(weeks.map((w,i)=>[w.start,i])), byId=new Map(activities.map(a=>[a.id,a])), rows=new Map();
+  function row(id) {
+    if(!rows.has(id)) rows.set(id,{activity:byId.get(id),weeks:weeks.map(()=>0),historical:0,total:0});
+    return rows.get(id);
+  }
+  for(const e of entries) {
+    if(!byId.has(e.activityId)||e.date<quarter.start||e.date>asOf||e.hours<=0)continue;
+    const value=units(e.hours),r=row(e.activityId);r.weeks[weekIndex.get(weekDays(e.date)[0])]+=value;r.total+=value;
+  }
+  // Period-only records stay separate. Their hours are never assigned to invented weeks.
+  for(const h of historical) {
+    if(!byId.has(h.activityId)||h.start<quarter.start||h.end>asOf||h.hours<=0)continue;
+    const value=units(h.hours),r=row(h.activityId);r.historical+=value;r.total+=value;
+  }
+  const result=[...rows.values()].sort((a,b)=>a.activity.account.localeCompare(b.activity.account)||b.total-a.total||a.activity.personalName.localeCompare(b.activity.personalName));
+  const weeklyTotals=weeks.map((_,i)=>result.reduce((sum,r)=>sum+r.weeks[i],0)/100),historicalTotal=result.reduce((sum,r)=>sum+r.historical,0)/100;
+  let workdays=0;
+  for(let date=quarter.start;date<=asOf;date=addDays(date,1)){const weekday=new Date(`${date}T12:00:00`).getDay();if(weekday!==0&&weekday!==6)workdays++;}
+  return {quarter,asOf,weeks,rows:result.map(r=>({...r,weeks:r.weeks.map(n=>n/100),historical:r.historical/100,total:r.total/100})),weeklyTotals,historicalTotal,total:result.reduce((sum,r)=>sum+r.total,0)/100,workdays,target:workdays*8};
+}
 export function recommendations(field, activities, entries, historical, context={}) {
   const scores = new Map();
   for(const a of activities) {

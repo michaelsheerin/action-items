@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {weekDays,fiscalQuarter,parseHours,totalsFor,rankActivities,recommendations,activityLabel,validateImport,validateActivity} from './work-core.js';
+import {weekDays,fiscalQuarter,parseHours,totalsFor,rankActivities,recommendations,activityLabel,validateImport,validateActivity,quarterProgress} from './work-core.js';
 const a={id:'a',account:'Goldman',oppId:'OPP-A',stage:'Deploy',activityName:'Launch',personalName:'Alpha',description:'One two three four five six seven',artifactAdded:true};
 const b={...a,id:'b',account:'Uber',personalName:'Beta'};
 const entry=(id,date,hours)=>({id:`${id}:${date}`,activityId:id,date,hours});
@@ -15,3 +15,20 @@ test('activity display retains the full description for width-based clipping',()
 test('import validates references, duplicates, dates and excludes Claritev',()=>{assert.throws(()=>validateImport(backup([a],[entry('missing','2026-10-26',2)])));assert.throws(()=>validateImport(backup([a],[entry('a','2026-02-30',2)])));assert.throws(()=>validateImport(backup([a,a])));assert.throws(()=>validateActivity({...a,account:'Claritev'}));assert.throws(()=>validateImport(backup([a],[entry('a','2026-10-26',25)])));});
 test('history overlap rejects double counted daily records and annual totals',()=>{assert.throws(()=>validateImport(backup([a],[entry('a','2026-07-01',2)],[history])));assert.throws(()=>validateImport(backup([a],[],[history,{...history,id:'a:FY27',period:'FY27',end:'2027-05-31'}])));assert.doesNotThrow(()=>validateImport(backup([a],[entry('a','2026-07-01',0)],[history])));});
 test('repeat import preserves existing corrections unless overwrite is requested',()=>{const raw=backup([a],[entry('a','2026-10-26',2)]),existing={activities:[a],entries:[entry('a','2026-10-26',3)],historical:[]};assert.equal(validateImport(raw,existing).entries.length,1);assert.equal(existing.entries[0].hours,3);assert.doesNotThrow(()=>validateImport(raw,existing,true));const parsed=validateImport(JSON.parse(JSON.stringify(backup([a],[entry('a','2026-10-26',.25)],[history]))));assert.equal(parsed.entries[0].hours,.25);assert.equal(parsed.activities[0].artifactAdded,true);});
+test('quarter progress clips partial weeks and future dates, excludes empty activities',()=>{
+  const es=[entry('a','2026-08-31',9),entry('a','2026-09-01',.1),entry('a','2026-09-06',.2),entry('a','2026-09-07',2),entry('a','2026-10-26',3),entry('b','2026-10-27',5),entry('b','2026-10-26',0)];
+  const report=quarterProgress([a,b],es,[history],'2026-10-26');
+  assert.equal(report.rows.length,1);assert.equal(report.total,5.3);assert.equal(report.rows[0].weeks[0],.3);assert.equal(report.weeklyTotals[1],2);assert.equal(report.weeklyTotals[8],3);assert.equal(report.historicalTotal,0);
+  assert.deepEqual(report.weeks[0],{start:'2026-08-31',from:'2026-09-01',to:'2026-09-06'});assert.deepEqual(report.weeks.at(-1),{start:'2026-10-26',from:'2026-10-26',to:'2026-10-26'});
+  assert.equal(report.workdays,40);assert.equal(report.target,320);
+});
+test('quarter target counts weekdays inclusively, with no hours for weekends',()=>{
+  assert.equal(quarterProgress([],[],[],'2026-09-01').target,8);
+  const friday=quarterProgress([],[],[],'2026-09-04'),sunday=quarterProgress([],[],[],'2026-09-06');
+  assert.equal(friday.target,32);assert.equal(sunday.target,32);assert.equal(sunday.rows.length,0);assert.equal(sunday.total,0);
+  const end=quarterProgress([a],[entry('a','2026-11-30',2)],[],'2026-11-30');assert.equal(end.weeks.length,14);assert.equal(end.weeks.at(-1).from,'2026-11-30');assert.equal(end.weeks.at(-1).to,'2026-11-30');assert.equal(end.total,2);
+});
+test('period-only quarter history stays unallocated and is counted once',()=>{
+  const report=quarterProgress([a],[],[history],'2026-08-31');assert.equal(report.total,40);assert.equal(report.historicalTotal,40);assert.ok(report.weeklyTotals.every(n=>n===0));assert.equal(report.rows[0].historical,40);
+  assert.equal(quarterProgress([a],[],[history],'2026-08-30').total,0);
+});

@@ -8,7 +8,7 @@ Requires Node.js 20 or newer. Run `node serve.mjs` and open http://127.0.0.1:417
 
 ## Publish on GitHub Pages
 
-Publish `index.html`, `archive.html`, `hours.html`, `activities.html`, `app.js`, `core.js`, `store.js`, `columns.js`, `interactions.js`, `work.js`, `work-core.js`, `work-store.js`, `work-picker.js`, `styles.css`, `work.css`, `icon.svg`, and `.nojekyll` at the repository root. In Settings > Pages, choose Deploy from a branch, then main and /(root). No build command or third-party services are required. The test, server, and documentation files are optional for hosting.
+Publish `index.html`, `archive.html`, `hours.html`, `activities.html`, `app.js`, `core.js`, `store.js`, `columns.js`, `interactions.js`, `work.js`, `work-core.js`, `work-store.js`, `work-picker.js`, `quarter.js`, `styles.css`, `work.css`, `icon.svg`, and `.nojekyll` at the repository root. In Settings > Pages, choose Deploy from a branch, then main and /(root). No build command or third-party services are required. The test, server, and documentation files are optional for hosting.
 
 ## Records and autosave
 
@@ -49,3 +49,11 @@ Each activity shows lifetime and current Oracle fiscal quarter hours before the 
 Historical balances retain their original period and total, without invented daily dates. Lifetime totals include them. Historical quarters contribute to their matching quarter, while annual balances do not get allocated across quarters. Daily inputs are locked inside an activity's historical aggregate period to prevent double counting. Data & backup exposes the historical balance list. Import validates dates, IDs, hours, references, duplicate records, and historical overlaps before one atomic transaction. Stable IDs make repeated imports idempotent; existing corrections are preserved unless Update matching records is selected.
 
 Browser tests cover recommendations, keyboard selection, row addition, immediate sums, daily persistence, week changes, activity editing, long descriptions, artifact toggles, historical locks, and repeat imports. Run `node --test core.test.js interactions.test.js work.test.js` for the automated suite.
+
+## This Quarter's Hours
+
+An expandable section below Hours entry lists activities with positive hours in the current Oracle fiscal quarter through today. Rows group by account. Monday-to-Sunday week columns cover elapsed weeks; the first and current weeks include only dates inside the quarter through today. Future-dated entries and previous quarters do not contribute to the quarter-to-date report. Each activity has a quarter total, with weekly and overall sums at the bottom. The report updates as daily entries change.
+
+Quarter hours so far and Target so far appear below the table. Target equals the number of Monday-through-Friday dates from the quarter start through today, inclusive, multiplied by eight hours. This is a weekday target, with no holiday or leave deductions. The report shows the workday count and through date alongside the target.
+
+Imported period-only balances are never distributed across invented weeks. A completed historical period wholly within the current quarter appears in a separate Historical column when present. The quarter table supports saved column widths, including new weeks added as the quarter progresses. Data & backup > Reset widths resets the entry and quarter tables. The section starts collapsed after reload.

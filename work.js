@@ -1,14 +1,15 @@
-import {WORK_ACCOUNTS,today,addDays,weekDays,fiscalQuarter,formatHours,parseHours,units,historyFor,totalsFor,rankActivities,activityLabel,recommendations,validateActivity,validateImport} from './work-core.js?v=12';
-import {openWorkStore} from './work-store.js?v=12';
-import {attachPicker} from './work-picker.js?v=12';
-import {installColumnSizing} from './columns.js?v=12';
+import {WORK_ACCOUNTS,today,addDays,weekDays,fiscalQuarter,formatHours,parseHours,units,historyFor,totalsFor,rankActivities,activityLabel,recommendations,validateActivity,validateImport} from './work-core.js?v=13';
+import {openWorkStore} from './work-store.js?v=13';
+import {attachPicker} from './work-picker.js?v=13';
+import {installColumnSizing} from './columns.js?v=13';
+import {createQuarterView} from './quarter.js?v=13';
 
 const isHours=document.body.dataset.view==='hours', $=id=>document.getElementById(id);
 let store, data={activities:[],entries:[],historical:[]}, days=weekDays(), rowSlots={}, views=[], pickers=[], pending=0, editId=null, generation=0, syncNeeded=false;
 const failed=new Map(), channel='BroadcastChannel' in window?new BroadcastChannel('sheerin-work-log-updates'):null;
 const quarter=fiscalQuarter();
 const widthSetting=isHours?'columns:hours':'columns:activities';
-let columnSizing, savedWidths=null;
+let columnSizing, savedWidths=null, quarterView;
 const app=$('app');
 app.innerHTML=`
 <header class="topbar"><a class="brand" href="./" aria-label="Action Items home"><span class="brand-mark" aria-hidden="true">✓</span><span>Action Items<small>Michael Sheerin’s workspace</small></span></a><nav aria-label="Pages"><a href="./">Action items</a><a href="./hours.html" ${isHours?'aria-current="page"':''}>Hours</a><a href="./activities.html" ${!isHours?'aria-current="page"':''}>Activities</a><a href="./archive.html">Archive</a></nav><div class="topbar-right"><span id="work-save" class="save-state" role="status">Loading…</span><button id="work-data" class="button">Data & backup</button><span class="avatar" title="Michael Sheerin">MS</span></div></header>
@@ -17,7 +18,7 @@ app.innerHTML=`
 <section class="work-surface" aria-label="${isHours?'Hours entry':'Activity directory'}">
 ${isHours?`<div class="work-toolbar"><div class="week-controls"><button id="previous-week" class="button week-arrow" aria-label="Previous week">‹</button><input id="week-date" type="date" aria-label="Week containing date"><button id="next-week" class="button week-arrow" aria-label="Next week">›</button><button id="current-week" class="text-button">This week</button></div><div id="week-heading" class="sr-only"></div><span id="quarter-label" class="toolbar-detail"></span></div>`:`<div class="work-toolbar"><input id="activity-search" type="search" placeholder="Search activities…" aria-label="Search activities"><span id="activity-count" class="toolbar-detail"></span><button id="new-activity" class="button primary">+ New activity</button></div>`}
 <div class="work-grid-wrap" tabindex="0" aria-label="${isHours?'Weekly hours grid':'Activities table'}"><table id="work-table" class="${isHours?'hours-grid':'activities-grid'}"><caption class="sr-only">${isHours?'Monday through Sunday hours, grouped by account':'Activities grouped by account'}</caption></table></div>
-</section></main>
+</section>${isHours?`<details id="quarter-section" class="quarter-section"><summary><span>This Quarter’s Hours</span><span class="quarter-period"></span></summary><div class="quarter-content"></div></details>`:''}</main>
 <dialog id="activity-dialog"><form id="activity-form"><div class="dialog-heading"><h2 id="activity-dialog-title">New activity</h2><button type="button" id="close-activity" class="icon-button" aria-label="Close activity form">×</button></div><div class="activity-form-grid">
 <label class="dialog-field" for="activity-account">Account<input id="activity-account" name="account" required maxlength="500" type="text"></label>
 <label class="dialog-field" for="activity-oppId">Opp ID<input id="activity-oppId" name="oppId" maxlength="500" type="text"></label>
@@ -50,6 +51,7 @@ function summary(){
   const historical=data.historical.reduce((s,h)=>s+units(h.hours),0)/100;
   $('history-summary').textContent=`${formatHours(historical)} historical hours included in lifetime totals`;
   $('data-overview').textContent=`${data.activities.length} activities · ${data.entries.filter(e=>e.hours>0).length} daily entries · ${data.historical.length} historical balances · ${formatHours(total)} total hours`;
+  quarterView?.refresh();
 }
 function sizeColumns(fields){
   columnSizing?.destroy();
@@ -175,10 +177,10 @@ $('work-import-file').onchange=async()=>{
   try{if(file.size>20_000_000)throw new Error('File exceeds 20 MB.');const raw=JSON.parse(await file.text()),overwrite=$('overwrite-work').checked;const parsed=validateImport(raw,data,overwrite);const counts=await store.import(parsed,overwrite);data=await store.all();summary();historyList();result.textContent=`Imported ${counts.activities} activities, ${counts.entries} daily entries, ${counts.historical} historical balances. ${counts.activities+counts.entries+counts.historical===0?'No new records.':''}`;if(isHours)await renderWeek();else renderActivities();channel?.postMessage({import:true});}
   catch(e){result.textContent=`Import stopped: ${e.message}`;}finally{$('choose-work-import').disabled=false;$('work-import-file').value='';}
 };
-$('reset-work-widths').onclick=()=>columnSizing?.reset();
+$('reset-work-widths').onclick=()=>{columnSizing?.reset();quarterView?.resetWidths();};
 $('work-retry').onclick=async()=>{for(const {key,value} of [...failed.values()])await persist(key,value);};
 window.addEventListener('beforeunload',event=>{if(pending||failed.size||$('work-table').querySelector('[aria-invalid="true"]')){event.preventDefault();event.returnValue='';}});
 async function sync(){if(pending||failed.size||document.activeElement?.matches('.hour-input,.activity-selector')||document.querySelector('dialog[open]')){syncNeeded=true;return;}data=await store.all();syncNeeded=false;if(isHours)await renderWeek();else renderActivities();}
 channel?.addEventListener('message',()=>void sync());
 document.addEventListener('focusout',()=>{setTimeout(()=>{if(syncNeeded)void sync();},0);});
-try{store=await openWorkStore();[data,savedWidths]=await Promise.all([store.all(),store.setting(widthSetting)]);if(isHours)await renderWeek();else renderActivities();status();}catch(e){error(`Unable to open saved records. ${e.message}`);$('work-save').textContent='Storage unavailable';}
+try{store=await openWorkStore();[data,savedWidths]=await Promise.all([store.all(),store.setting(widthSetting)]);if(isHours)quarterView=createQuarterView($('quarter-section'),{records:()=>data,store,onError:e=>error(`Quarter column widths did not save. ${e.message}`)});if(isHours)await renderWeek();else renderActivities();status();}catch(e){error(`Unable to open saved records. ${e.message}`);$('work-save').textContent='Storage unavailable';}
