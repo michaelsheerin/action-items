@@ -289,6 +289,9 @@ h1 { font-size: 22.5px; }
 #actions-table .task-row .cell-done { padding: 0; vertical-align: middle; line-height: 0; }
 #actions-table .task-row .field-done { width: 14px; height: 14px; min-height: 0; padding: 0; }
 #actions-table .task-row[data-status="Urgent"] .cell-status { background: #ffe0e5; }
+#actions-table .account-records .task-row td.cell-due.due-alert { background: #ffe0e5; }
+#actions-table .task-row .field-due.due-alert,
+#actions-table .cell-due.due-alert .calendar-button { color: #8f1934; }
 #actions-table .task-row[data-status="Waiting"] .cell-status { background: #fff0bc; }
 #actions-table .task-row[data-status="Scheduled"] .cell-status { background: #d8e9ff; }
 #actions-table .task-row[data-status="Not Urgent"] .cell-status { background: #e1e6ee; }

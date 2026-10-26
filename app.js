@@ -130,11 +130,15 @@ function autoSize(control) {
 }
 function updateRowAppearance(row, task) {
   row.dataset.status = task.status;
+  const today = localDay();
   const due = row.querySelector('[data-field="due"]');
-  due?.classList.toggle('overdue-date', Boolean(task.due && task.due < localDay()));
-  if (due) due.title = task.due && task.due < localDay() ? 'Overdue' : task.due === localDay() ? 'Today' : '';
+  const highlightDue = Boolean(task.due && task.due <= today);
+  due?.classList.toggle('overdue-date', Boolean(task.due && task.due < today));
+  due?.classList.toggle('due-alert', highlightDue);
+  due?.closest('.cell-due')?.classList.toggle('due-alert', highlightDue);
+  if (due) due.title = task.due && task.due < today ? 'Overdue' : task.due === today ? 'Today' : '';
   const hint = row.querySelector('.due-hint');
-  if (hint) hint.textContent = task.due && task.due < localDay() ? 'Overdue' : task.due === localDay() ? 'Today' : '';
+  if (hint) hint.textContent = task.due && task.due < today ? 'Overdue' : task.due === today ? 'Today' : '';
   row.querySelector('[data-field="status"]')?.setAttribute('data-value', task.status);
   for (const control of row.querySelectorAll('[data-field]')) control.classList.toggle('is-bold', cellIsBold(task, control.dataset.field));
 }
