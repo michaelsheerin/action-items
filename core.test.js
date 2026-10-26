@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {newTask, weekBounds, sectionFor, compareTasks, normalizeTask, parseImport, categoryOptions, safeURL, csvExport, matches, upgradeTask, STATUSES, FIELDS} from './core.js';
+import {newTask, weekBounds, sectionFor, compareTasks, normalizeTask, parseImport, categoryOptions, safeURL, csvExport, matches, upgradeTask, STATUSES, FIELDS, cellIsBold, toggledBoldFields, ticketText, ticketInputPatch, linkPatch} from './core.js';
 const date = new Date(2026,9,23,12);
 test('Monday-based week includes Sunday, overdue dates, and the next year boundary', () => {
   assert.deepEqual(weekBounds(date), {start:'2026-10-19',end:'2026-10-25',next:'2026-10-26'});
@@ -71,4 +71,49 @@ test('new rows have no default due date and one status; export follows the reque
   assert.deepEqual(STATUSES,['Urgent','Waiting','Scheduled','Not Urgent']);
   assert.deepEqual(FIELDS,['account','category','title','due','status','done','notes','ticket','owner']);
   assert.equal(csvExport([]).split('\r\n')[0].replace(/^\uFEFF/,''),'"Account","Category","Action item","Due date","Status","Complete","Notes","Ticket ID / link","Owner"');
+});
+
+test('cell text starts regular and bold toggles only the selected cell without changing content', () => {
+  const task = {...newTask('Goldman'), title:'Keep this text', notes:'Keep these notes', due:'2026-10-27'};
+  assert.deepEqual(task.boldFields, []);
+  task.boldFields = toggledBoldFields(task, 'title');
+  assert.equal(cellIsBold(task,'title'), true);
+  assert.equal(cellIsBold(task,'notes'), false);
+  task.boldFields = toggledBoldFields(task,'notes');
+  task.boldFields = toggledBoldFields(task,'title');
+  assert.deepEqual(task.boldFields,['notes']);
+  assert.equal(task.title,'Keep this text'); assert.equal(task.notes,'Keep these notes'); assert.equal(task.due,'2026-10-27');
+  assert.equal(cellIsBold({title:'Legacy record'},'title'),false);
+  assert.throws(()=>toggledBoldFields(task,'done'));
+});
+
+test('friendly hyperlink labels and subsequent label edits retain the original destination', () => {
+  const task = {...newTask('Goldman'), ...linkPatch('https://example.com/ticket/42','Rack status')};
+  assert.equal(ticketText(task),'Rack status');
+  Object.assign(task,ticketInputPatch(task,'Provisioning status'));
+  assert.equal(task.ticket,'https://example.com/ticket/42');
+  assert.equal(task.ticketLabel,'Provisioning status');
+  Object.assign(task,ticketInputPatch(task,'https://example.com/ticket/43'));
+  assert.equal(task.ticket,'https://example.com/ticket/43'); assert.equal(task.ticketLabel,'');
+  assert.equal(ticketText({...task,ticket:'LCM-10421',ticketLabel:''}),'LCM-10421');
+  assert.throws(()=>linkPatch('javascript:alert(1)','Open ticket'));
+  assert.throws(()=>linkPatch('LCM-10421','Open ticket'));
+});
+
+test('backup imports retain bold fields, link labels, source references, and historical dates', () => {
+  const source = {...newTask('Goldman'),id:'stable',ticket:'https://example.com/42',ticketLabel:'Capacity tracker',boldFields:['notes','title'],notes:'Line one\nLine two',createdAt:null,source:{sheet:'GS',row:42}};
+  const [task] = parseImport(JSON.stringify({format:'action-items',version:3,tasks:[source]}));
+  assert.deepEqual(task.boldFields,['title','notes']); assert.equal(task.ticket,source.ticket); assert.equal(task.ticketLabel,source.ticketLabel);
+  assert.equal(task.notes,source.notes); assert.equal(task.createdAt,null); assert.deepEqual(task.source,source.source);
+  assert.equal(matches(task,'capacity tracker'),true);
+  const csv = csvExport([task]);
+  assert.ok(csv.includes('"Link display text"')); assert.ok(csv.includes('"https://example.com/42"')); assert.ok(csv.includes('"Capacity tracker"'));
+});
+
+test('invalid formatting metadata or unsafe labeled links reject the whole import', () => {
+  const source = newTask('Internal');
+  for (const patch of [{boldFields:'title'},{boldFields:['done']},{boldFields:['unknown']},{ticketLabel:42},{ticket:'javascript:alert(1)',ticketLabel:'Unsafe'}]) {
+    assert.throws(()=>parseImport(JSON.stringify([{...source,...patch}])));
+  }
+  assert.deepEqual(normalizeTask({...source,boldFields:['title','title']}).boldFields,['title']);
 });

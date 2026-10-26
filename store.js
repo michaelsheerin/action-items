@@ -1,4 +1,4 @@
-import {upgradeTask, STATUSES} from './core.js?v=4';
+import {upgradeTask, STATUSES} from './core.js?v=9';
 
 const DB_NAME = 'sheerin-action-items';
 const DB_VERSION = 1;

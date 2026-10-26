@@ -17,14 +17,17 @@ export function installColumnSizing(table, fields, {onChange, onResize, onError}
     if (!widths) return;
     fields.forEach((field, index) => {
       columns[index].style.width = `${widths[field]}px`;
-      headers[index].querySelector('.column-resizer')?.setAttribute('aria-valuenow', widths[field]);
     });
-    table.style.minWidth = '0px';
+    table.style.minWidth = '100%';
     table.style.width = `${fields.reduce((total, field) => total + widths[field], 0)}px`;
+    syncAria();
     resizeText();
   }
+  function syncAria() {
+    headers.forEach(header => header.querySelector('.column-resizer')?.setAttribute('aria-valuenow', Math.round(header.getBoundingClientRect().width)));
+  }
   function materialize() {
-    if (!widths) widths = Object.fromEntries(fields.map((field, index) => [field, clamp(field, headers[index].getBoundingClientRect().width)]));
+    widths = Object.fromEntries(fields.map((field, index) => [field, clamp(field, headers[index].getBoundingClientRect().width)]));
     apply();
   }
   function persist() { Promise.resolve(onChange?.(widths ? {...widths} : null)).catch(error => onError?.(error)); }
@@ -84,6 +87,7 @@ export function installColumnSizing(table, fields, {onChange, onResize, onError}
     headers[index].append(handle);
     handle.setAttribute('aria-valuenow', Math.round(headers[index].getBoundingClientRect().width));
   });
+  window.addEventListener('resize', () => { syncAria(); resizeText(); });
   return {
     restore(saved) {
       if (!saved || typeof saved !== 'object' || !fields.every(field => Number.isFinite(saved[field]))) return;

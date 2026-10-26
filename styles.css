@@ -242,3 +242,78 @@ dialog { color: #243a55; border-color: #a8bbd4; }
 .calendar-button { color: #455e7a; }
 .calendar-button:hover { color: #173b65; background: #d8e6f8; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline-color: #245fae; }
+/* Flat spreadsheet cells, at approximately the previous 90% text scale. */
+:root { font-size: 11px; }
+.topbar { min-height: 54px; padding: 8px 14px; }
+.brand { font-size: 14.5px; }
+.brand-mark { width: 29px; height: 29px; font-size: 19px; }
+.brand small { font-size: 9px; }
+nav a { font-size: 11px; padding: 6px 10px; }
+.save-state { font-size: 10px; }
+main { padding: 15px 10px 9px; }
+.page-heading { margin-bottom: 14px; }
+h1 { font-size: 22.5px; }
+.page-heading p { font-size: 10.8px; }
+.heading-right .button { min-height: 32px; }
+.summary { font-size: 10px; }
+.summary strong { font-size: 18px; }
+.work-surface { border-radius: 2px; box-shadow: none; }
+.toolbar { padding: 7px 9px; gap: 12px; }
+.search-box input { font-size: 10.8px; padding: 6px 0; }
+.filters select { min-height: 29px; font-size: 10px; padding: 4px 7px; }
+.visible-count { font-size: 10px; }
+#actions-table { min-width: 1260px; width: 100%; }
+.col-account { width: 90px; }.col-category { width: 115px; }.col-due { width: 115px; }.col-status { width: 100px; }.col-done { width: 44px; }.col-ticket { width: 118px; }.col-owner { width: 133px; }
+#actions-table thead th { padding: 8px 7px; font-size: 9.5px; font-weight: 500; }
+#actions-table .account-row th { padding: 7px 9px; border-top-width: 3px; border-top-color: #c7d3e4; font-size: 12px; font-weight: 500; }
+#actions-table .account-heading:first-of-type .account-row th { border-top: 0; }
+#actions-table .account-row .band-description { padding: 0; margin-left: 9px; background: transparent; border: 0; border-radius: 0; color: #e0eaf8; font-size: 9px; }
+#actions-table .subsection-bar { padding: 4px 10px; min-height: 25px; font-size: 10px; }
+#actions-table .subsection-title { font-weight: 500; }
+#actions-table .section-count { background: transparent; border-radius: 0; padding: 0 2px; min-width: 12px; font-size: 9px; }
+#actions-table .subsection-description { font-size: 9px; }
+#actions-table .account-records .task-row td { padding: 0; background: #fff; border-bottom: 1px solid #b7c7dd; box-shadow: inset -1px 0 #b0c0d6; }
+#actions-table .account-records .task-row:hover td,
+#actions-table .account-records .task-row:focus-within td { background: #fff; }
+#actions-table .account-records .task-row.draft-row td { background: #e3ecf9; }
+#actions-table .task-row .cell-input { min-height: 29px; padding: 5px 6px; border: 0; border-radius: 0; background: transparent; box-shadow: none; font-size: 11px; font-weight: 400; line-height: 1.35; transition: none; }
+#actions-table .task-row .cell-input:hover,
+#actions-table .task-row .cell-input:focus { border: 0; border-radius: 0; background: transparent; box-shadow: none; outline: 0; }
+#actions-table .account-records .task-row td:focus-within { box-shadow: inset 0 0 0 1.5px #245fae; }
+#actions-table .task-row .cell-input.is-bold { font-weight: 700; }
+#actions-table .task-row .field-owner,
+#actions-table .task-row .field-ticket,
+#actions-table .task-row .field-due,
+#actions-table .task-row .field-status { font-size: 10px; }
+#actions-table .task-row .field-notes { font-size: 10.5px; }
+#actions-table .task-row .cell-done { padding: 0; vertical-align: middle; line-height: 0; }
+#actions-table .task-row .field-done { width: 14px; height: 14px; min-height: 0; padding: 0; }
+#actions-table .task-row[data-status="Urgent"] .cell-status { background: #ffe0e5; }
+#actions-table .task-row[data-status="Waiting"] .cell-status { background: #fff0bc; }
+#actions-table .task-row[data-status="Scheduled"] .cell-status { background: #d8e9ff; }
+#actions-table .task-row[data-status="Not Urgent"] .cell-status { background: #e1e6ee; }
+#actions-table .task-row.draft-row .cell-status { background: #e3ecf9; }
+#actions-table .task-row .date-control.with-picker .field-due { padding-right: 25px; }
+#actions-table .calendar-button { width: 23px; height: 23px; top: 3px; right: 2px; padding: 3px; border-radius: 0; }
+#actions-table .calendar-button svg { width: 13px; height: 13px; }
+#actions-table .ticket-control { gap: 0; }
+#actions-table .ticket-link { flex: none; font-size: 13px; padding: 3px; border-radius: 0; }
+#actions-table .field-ticket.has-link { color: #1f5b9b; text-decoration: underline; text-underline-offset: 2px; }
+.ticket-edit-button { flex: none; width: 18px; height: 25px; padding: 0; border: 0; border-radius: 0; background: transparent; color: #526d91; opacity: 0; font-size: 13px; }
+.cell-ticket:hover .ticket-edit-button, .cell-ticket:focus-within .ticket-edit-button { opacity: 1; }
+.ticket-edit-button:hover { background: #dce8f9; }
+.cell-tools { display: flex; flex: none; align-items: center; gap: 2px; border-left: 1px solid #b9c7d9; padding-left: 8px; }
+.format-button { display: grid; place-items: center; width: 26px; height: 25px; padding: 3px; border: 1px solid transparent; border-radius: 2px; color: #294768; background: transparent; }
+.format-button:hover { background: #e0eafa; border-color: #a0b4cf; }
+.format-button[aria-pressed="true"] { background: #c8dcf6; border-color: #6a8ab3; }
+#bold-cell span { font: 700 13px Georgia, serif; }
+.format-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.table-footer { padding: 6px 9px; min-height: 31px; font-size: 9px; }
+.workspace-footer { font-size: 9px; margin-top: 7px; }
+.dialog-field { display: flex; flex-direction: column; gap: 6px; margin: 20px 0 15px; font-size: 12px; color: #354f6c; }
+.dialog-field input { width: 100%; min-height: 34px; border: 1px solid #9fb2cb; border-radius: 2px; background: #fff; color: #243a55; padding: 7px 9px; font-size: 12px; }
+.optional-label { color: #6c7f98; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.link-error { color: #a0263d; font-size: 11px; line-height: 1.5; margin: 14px 0 0; }
+@media(max-width:780px) { .topbar { min-height: 54px; }.toolbar { gap: 8px; }.cell-tools { margin-left: auto; }.table-footer > span:first-child { display: none; } }
+@media(pointer:coarse) { .ticket-edit-button { opacity: 1; } }

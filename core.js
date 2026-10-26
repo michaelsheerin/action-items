@@ -49,7 +49,7 @@ export function compareTasks(a, b) {
 }
 
 export function matches(task, query = '', account = '', status = '') {
-  const text = FIELDS.filter(k => k !== 'done').map(k => task[k] || '').join(' ').toLocaleLowerCase();
+  const text = [...FIELDS.filter(k => k !== 'done').map(k => task[k] || ''), task.ticketLabel || ''].join(' ').toLocaleLowerCase();
   return (!account || task.account === account) && (!status || task.status === status)
     && query.toLocaleLowerCase().trim().split(/\s+/).every(word => text.includes(word));
 }
@@ -66,9 +66,34 @@ export function safeURL(value) {
   } catch { return ''; }
 }
 
+export function cellIsBold(task, field) {
+  return field !== 'done' && Array.isArray(task.boldFields) && task.boldFields.includes(field);
+}
+
+export function toggledBoldFields(task, field) {
+  if (!FIELDS.includes(field) || field === 'done') throw new Error('Select a text cell to change its formatting.');
+  return FIELDS.filter(key => key !== 'done' && (key === field ? !cellIsBold(task, key) : cellIsBold(task, key)));
+}
+
+export function ticketText(task) {
+  return safeURL(task.ticket) && task.ticketLabel ? task.ticketLabel : task.ticket;
+}
+
+export function ticketInputPatch(task, value) {
+  if (safeURL(task.ticket) && task.ticketLabel && !safeURL(value)) return {ticketLabel: value};
+  return {ticket: value, ticketLabel: ''};
+}
+
+export function linkPatch(destination, label) {
+  const ticket = destination.trim();
+  const ticketLabel = label.trim();
+  if (ticketLabel && !safeURL(ticket)) throw new Error('Enter an HTTP or HTTPS address to use custom display text.');
+  return {ticket, ticketLabel};
+}
+
 export function newTask(account, due = '', id = crypto.randomUUID()) {
   const now = new Date().toISOString();
-  return {id, account, category: '', title: '', due, status: 'Not Urgent', statusSchema: 2, ticket: '', owner: OWNER,
+  return {id, account, category: '', title: '', due, status: 'Not Urgent', statusSchema: 2, ticket: '', ticketLabel: '', boldFields: [], owner: OWNER,
     done: false, notes: '', createdAt: now, updatedAt: now, completedAt: null};
 }
 
@@ -87,6 +112,15 @@ export function normalizeTask(raw, index = 0) {
     }
   }
   base.account = account;
+  if (raw.ticketLabel != null) {
+    if (typeof raw.ticketLabel !== 'string' || raw.ticketLabel.length > 100000) throw new Error(`Record ${index + 1}: invalid link display text.`);
+    base.ticketLabel = raw.ticketLabel;
+    if (base.ticketLabel && !safeURL(base.ticket)) throw new Error(`Record ${index + 1}: link display text requires an HTTP or HTTPS address.`);
+  }
+  if (raw.boldFields != null) {
+    if (!Array.isArray(raw.boldFields) || raw.boldFields.length > FIELDS.length || !raw.boldFields.every(field => field !== 'done' && FIELDS.includes(field))) throw new Error(`Record ${index + 1}: invalid cell formatting.`);
+    base.boldFields = FIELDS.filter(field => raw.boldFields.includes(field));
+  }
   if (base.due && !validDay(base.due)) throw new Error(`Record ${index + 1}: invalid due date.`);
   if (Object.hasOwn(raw, 'urgency') && !['', 'Urgent', 'Not urgent', 'Not Urgent'].includes(raw.urgency)) throw new Error(`Record ${index + 1}: invalid legacy urgency.`);
   if (![...STATUSES, 'Ready', 'In progress', 'Not urgent', ''].includes(base.status)) throw new Error(`Record ${index + 1}: invalid status.`);
@@ -116,10 +150,12 @@ export function parseImport(text) {
 
 export function csvExport(tasks) {
   const header = ['Account', 'Category', 'Action item', 'Due date', 'Status', 'Complete', 'Notes', 'Ticket ID / link', 'Owner'];
+  const includeLabels = tasks.some(task => task.ticketLabel);
+  if (includeLabels) header.push('Link display text');
   const quote = value => {
     let text = String(value ?? '');
     if (/^[\s]*[=+@-]/.test(text) || /^[\t\r]/.test(text)) text = `'${text}`;
     return `"${text.replaceAll('"', '""')}"`;
   };
-  return '\uFEFF' + [header, ...tasks.map(t => FIELDS.map(k => t[k]))].map(row => row.map(quote).join(',')).join('\r\n');
+  return '\uFEFF' + [header, ...tasks.map(task => [...FIELDS.map(key => task[key]), ...(includeLabels ? [task.ticketLabel || ''] : [])])].map(row => row.map(quote).join(',')).join('\r\n');
 }

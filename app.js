@@ -1,6 +1,6 @@
-import {ACCOUNTS, OWNER, STATUSES, FIELDS, localDay, weekBounds, sectionFor, compareTasks, matches, categoryOptions, safeURL, newTask, parseImport, csvExport} from './core.js?v=4';
-import {openStore} from './store.js?v=4';
-import {installColumnSizing} from './columns.js?v=6';
+import {ACCOUNTS, OWNER, STATUSES, FIELDS, localDay, weekBounds, sectionFor, compareTasks, matches, categoryOptions, safeURL, newTask, parseImport, csvExport, cellIsBold, toggledBoldFields, ticketText, ticketInputPatch, linkPatch} from './core.js?v=9';
+import {openStore} from './store.js?v=9';
+import {installColumnSizing} from './columns.js?v=9';
 import {inlineCompletion, reconcileChildren, installGridKeys} from './interactions.js?v=7';
 
 const archived = document.body.dataset.view === 'archive';
@@ -16,6 +16,8 @@ let retryEdits = new Map();
 let currentDay = localDay();
 let layoutPending = false;
 let syncPending = false;
+let activeCell = null;
+let linkTarget = null;
 const drafts = new Map();
 const rowViews = new Map();
 const accountViews = new Map();
@@ -45,11 +47,19 @@ app.innerHTML = `
   </main>
   <div id="completion-hint" class="sr-only" role="status" aria-live="polite"></div>
   <dialog id="keyboard-dialog"><div class="dialog-heading"><div><div class="eyebrow">WORK FASTER</div><h2>Keyboard shortcuts</h2></div><button id="close-keyboard" class="icon-button" aria-label="Close keyboard shortcuts">×</button></div><dl class="shortcut-list"><div><dt>Next / previous field</dt><dd><kbd>Tab</kbd> / <kbd>Shift Tab</kbd></dd></div><div><dt>Move up / down in a column</dt><dd><kbd>Ctrl Alt ↑</kbd> / <kbd>Ctrl Alt ↓</kbd></dd></div><div><dt>Move left / right between fields</dt><dd><kbd>Alt ←</kbd> / <kbd>Alt →</kbd></dd></div><div><dt>New action in this section</dt><dd><kbd>Ctrl Enter</kbd> or <kbd>⌘ Enter</kbd></dd></div><div><dt>New action</dt><dd><kbd>Alt N</kbd></dd></div><div><dt>Search</dt><dd><kbd>Ctrl K</kbd> or <kbd>/</kbd></dd></div><div><dt>Start editing search results</dt><dd><kbd>Enter</kbd> in search</dd></div><div><dt>Accept inline completion</dt><dd><kbd>Tab</kbd> or <kbd>→</kbd></dd></div><div><dt>Keep typed text / leave a field</dt><dd><kbd>Esc</kbd></dd></div><div><dt>Add an Action Item line</dt><dd><kbd>Enter</kbd></dd></div><div><dt>Add a Notes line</dt><dd><kbd>Shift Enter</kbd></dd></div></dl><p class="small-print">Dropdown arrows and calendar keys keep their native browser behavior. Focus Remaining Items and press Enter or Space to expand.</p></dialog>
+  <dialog id="link-dialog"><form id="link-form"><div class="dialog-heading"><h2>Edit ticket link</h2><button type="button" id="close-link" class="icon-button" aria-label="Close link editor">×</button></div><label class="dialog-field" for="link-address">Address or ticket ID<input id="link-address" type="text" autocomplete="off" spellcheck="false"></label><label class="dialog-field" for="link-label">Display text <span class="optional-label">(optional)</span><input id="link-label" type="text" autocomplete="off"></label><p class="small-print">Leave display text blank to show the address. Custom display text requires an HTTP or HTTPS link.</p><p id="link-error" class="link-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" id="cancel-link" class="button">Cancel</button><button type="submit" id="save-link" class="button primary">Save link</button></div></form></dialog>
   <div id="toast" class="toast" role="status" hidden><span id="toast-text"></span><button id="toast-undo" hidden>Undo</button></div>
   <dialog id="data-dialog"><div class="dialog-heading"><h2>Your records</h2><button id="close-data" class="icon-button" aria-label="Close data settings">×</button></div><p class="dialog-intro">Changes save on this device. Download a backup to move your records to another browser.</p><div class="data-action"><div><strong>Back up all records</strong><p>Includes active actions, completed actions, and source references.</p></div><button id="export-json" class="button primary">Download JSON</button></div><div class="data-action"><div><strong>Export a spreadsheet</strong><p>Download ${archived ? 'completed' : 'active'} actions as CSV.</p></div><button id="export-csv" class="button">Download CSV</button></div><div class="data-action"><div><strong>Import records</strong><p>Import an Action Items JSON backup or migration file.</p></div><button id="choose-import" class="button">Choose file</button></div><label class="overwrite-option"><input id="overwrite-import" type="checkbox"> Update matching records from the file</label><p class="small-print">Existing records stay unchanged unless this option is selected. Imported rows merge by record ID.</p><input id="import-file" type="file" accept=".json,application/json" hidden><div id="import-result" class="import-result" role="status"></div></dialog>
 `;
 
 const el = id => document.getElementById(id);
+const cellTools = document.createElement('div'); cellTools.className = 'cell-tools'; cellTools.setAttribute('role', 'group'); cellTools.setAttribute('aria-label', 'Cell formatting');
+cellTools.innerHTML = '<button id="bold-cell" class="format-button" type="button" aria-label="Bold selected cell" aria-pressed="false" title="Bold selected cell (Ctrl+B)" disabled><span aria-hidden="true">B</span></button><button id="edit-ticket-link" class="format-button" type="button" aria-label="Edit ticket link" title="Edit ticket link and display text (Ctrl+K in the ticket cell)" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m8 12 4-4m-5 6-1 1a3 3 0 0 1-4-4l3-3a3 3 0 0 1 4 0m2 4a3 3 0 0 0 4 0l3-3a3 3 0 0 0-4-4l-1 1"/></svg></button>';
+el('visible-count').before(cellTools);
+const shortcut = document.createElement('div'); shortcut.innerHTML = '<dt>Bold selected cell</dt><dd><kbd>Ctrl B</kbd> or <kbd>⌘ B</kbd></dd>';
+el('keyboard-dialog').querySelector('.shortcut-list').append(shortcut);
+const linkShortcut = document.createElement('div'); linkShortcut.innerHTML = '<dt>Edit ticket link / display text</dt><dd><kbd>Ctrl K</kbd> in Ticket ID / link</dd>';
+el('keyboard-dialog').querySelector('.shortcut-list').append(linkShortcut);
 for (const account of ACCOUNTS) el('account-filter').append(new Option(account, account));
 function shortDate(iso, options = {}) { return new Date(`${iso}T12:00:00`).toLocaleDateString('en-US', {month: 'short', day: 'numeric', ...options}); }
 function setSaveState() {
@@ -88,7 +98,7 @@ async function saveTask(task, patch) {
   } finally { pending--; setSaveState(); if (!pending && syncPending && !editingCell()) void syncFromStore(); }
 }
 
-function editingCell() { return Boolean(document.activeElement?.closest('#actions-table [data-field]')); }
+function editingCell() { return Boolean(document.activeElement?.closest('#actions-table [data-field]') || el('link-dialog').open); }
 function mergeTasks(fresh) {
   tasks = new Map(fresh.map(task => {
     const existing = tasks.get(task.id);
@@ -114,7 +124,7 @@ function summary() {
 function autoSize(control) {
   if (control.tagName !== 'TEXTAREA' || !control.getClientRects().length) return;
   control.style.height = '0px';
-  const height = Math.max(32, control.scrollHeight + 2);
+  const height = Math.max(29, control.scrollHeight + 2);
   control.style.height = `${Math.min(160, height)}px`;
   control.style.overflowY = height > 160 ? 'auto' : 'hidden';
 }
@@ -126,6 +136,7 @@ function updateRowAppearance(row, task) {
   const hint = row.querySelector('.due-hint');
   if (hint) hint.textContent = task.due && task.due < localDay() ? 'Overdue' : task.due === localDay() ? 'Today' : '';
   row.querySelector('[data-field="status"]')?.setAttribute('data-value', task.status);
+  for (const control of row.querySelectorAll('[data-field]')) control.classList.toggle('is-bold', cellIsBold(task, control.dataset.field));
 }
 function scheduleRender() {
   clearTimeout(renderTimer);
@@ -136,6 +147,16 @@ function scheduleRender() {
   }, 0);
 }
 
+function promoteRow(row, task) {
+  if (row.dataset.draft !== 'true') return;
+  const group = row.closest('tbody');
+  row.dataset.draft = 'false'; row.classList.remove('draft-row');
+  tasks.set(task.id, task); row.querySelector('[data-field="done"]').disabled = false;
+  drafts.delete(`${group.dataset.bucket}:${group.dataset.account}`);
+  group.append(rowFor(draftFor(group.dataset.account, group.dataset.bucket), true, group.dataset.bucket));
+  for (const control of row.querySelectorAll('[data-field]')) control.setAttribute('aria-label', `${labels[control.dataset.field]}, ${task.account}, ${task.title || 'untitled action'}`);
+  row.querySelector('.field-title').placeholder = 'Action item…';
+}
 function inputFor(task, field, draft, bucket) {
   let control;
   if (field === 'account' || field === 'status') {
@@ -153,7 +174,7 @@ function inputFor(task, field, draft, bucket) {
     control.placeholder = field === 'title' ? draft ? 'Add an action item…' : 'Action item…' : '';
     control.spellcheck = true;
   } else {
-    control = document.createElement('input'); control.type = 'text'; control.value = task[field];
+    control = document.createElement('input'); control.type = 'text'; control.value = field === 'ticket' ? ticketText(task) : task[field];
     control.placeholder = field === 'category' ? 'Category…' : field === 'ticket' ? '' : OWNER;
     if (field === 'category') control.autocomplete = 'off';
   }
@@ -161,23 +182,16 @@ function inputFor(task, field, draft, bucket) {
   control.setAttribute('aria-label', `${labels[field]}, ${task.account}, ${draft ? `new ${bucket === 'week' ? 'this week' : 'remaining'} action` : task.title || 'untitled action'}`);
   function commitValue(value) {
     const row = control.closest('tr');
-    if (task[field] === value) return;
-    task[field] = value;
+    const patch = field === 'ticket' ? ticketInputPatch(task, value) : {[field]: value};
+    if (Object.entries(patch).every(([key, next]) => task[key] === next)) return;
+    Object.assign(task, patch);
     const updatedAt = new Date().toISOString(); task.updatedAt = updatedAt;
-    if (row.dataset.draft === 'true') {
-      row.dataset.draft = 'false'; row.classList.remove('draft-row');
-      tasks.set(task.id, task); row.querySelector('[data-field="done"]').disabled = false;
-      drafts.delete(`${bucket}:${row.dataset.account}`);
-      const group = row.closest('tbody');
-      group.append(rowFor(draftFor(group.dataset.account, group.dataset.bucket), true, group.dataset.bucket));
-      for (const cell of row.querySelectorAll('[data-field]')) cell.setAttribute('aria-label', `${labels[cell.dataset.field]}, ${task.account}, ${task.title || 'untitled action'}`);
-      control.placeholder = field === 'title' ? 'Action item…' : control.placeholder;
-    }
+    promoteRow(row, task);
     // Keep an edited action visible if its date or account moves it into Remaining Items.
     if (sectionFor(task) === 'remaining' && (row.closest('tbody').dataset.bucket === 'week' || field === 'account')) expandedRemaining.add(task.account);
-    if (field === 'ticket') updateTicketLink(row, value);
+    if (field === 'ticket') updateTicketLink(row, task);
     autoSize(control); updateRowAppearance(row, task); summary();
-    void saveTask(task, {[field]: value, updatedAt});
+    void saveTask(task, {...patch, updatedAt});
     layoutPending = true;
   }
   const completion = ['category', 'owner'].includes(field) ? inlineCompletion(control,
@@ -194,8 +208,11 @@ function inputFor(task, field, draft, bucket) {
   return control;
 }
 
-function updateTicketLink(row, value) {
-  const anchor = row.querySelector('.ticket-link'); const url = safeURL(value);
+function updateTicketLink(row, task) {
+  const anchor = row.querySelector('.ticket-link'); const url = safeURL(task.ticket);
+  const input = row.querySelector('.field-ticket');
+  input?.classList.toggle('has-link', Boolean(url));
+  if (input) input.title = url ? `Destination: ${url}` : '';
   if (!anchor) return;
   anchor.hidden = !url;
   if (url) { anchor.href = url; anchor.title = `Open ${url}`; } else anchor.removeAttribute('href');
@@ -209,7 +226,10 @@ function makeRow(task, draft = false, bucket = '') {
     if (field === 'ticket') {
       const wrapper = document.createElement('div'); wrapper.className = 'ticket-control';
       const anchor = document.createElement('a'); anchor.className = 'ticket-link'; anchor.textContent = '↗'; anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; anchor.setAttribute('aria-label', 'Open ticket link');
-      wrapper.append(control, anchor); cell.append(wrapper);
+      const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'ticket-edit-button'; edit.tabIndex = -1;
+      edit.setAttribute('aria-label', `Edit ticket link, ${task.account}, ${draft ? 'new action' : task.title || 'untitled action'}`);
+      edit.title = 'Edit link and display text'; edit.textContent = '✎'; edit.onclick = () => openLinkEditor(control);
+      wrapper.append(control, anchor, edit); cell.append(wrapper);
     } else if (field === 'due') {
       const wrapper = document.createElement('div'); wrapper.className = 'date-control'; wrapper.append(control);
       if (typeof control.showPicker === 'function') {
@@ -231,7 +251,7 @@ function makeRow(task, draft = false, bucket = '') {
     } else cell.append(control);
     row.append(cell);
   }
-  updateTicketLink(row, task.ticket); updateRowAppearance(row, task);
+  updateTicketLink(row, task); updateRowAppearance(row, task);
   row.addEventListener('focusout', event => {
     if (row.contains(event.relatedTarget)) return;
     if (row.dataset.draft !== 'true') scheduleRender();
@@ -243,17 +263,94 @@ function rowFor(task, draft = false, bucket = '') {
   if (!row) { row = makeRow(task, draft, bucket); rowViews.set(task.id, row); }
   return row;
 }
+function cellContext(control = activeCell) {
+  if (!control?.isConnected || !control.getClientRects().length) return null;
+  const row = control.closest('tr[data-id]');
+  if (!row) return null;
+  const task = tasks.get(row.dataset.id) || [...drafts.values()].find(draft => draft.id === row.dataset.id);
+  return task ? {row, task, control, field: control.dataset.field} : null;
+}
+function refreshCellTools() {
+  const context = cellContext();
+  el('bold-cell').disabled = !context || context.field === 'done';
+  el('bold-cell').setAttribute('aria-pressed', String(Boolean(context && cellIsBold(context.task, context.field))));
+  el('edit-ticket-link').disabled = !context;
+}
+async function toggleSelectedBold(control = activeCell) {
+  const context = cellContext(control);
+  if (!context || context.field === 'done') return;
+  activeCell = control;
+  context.task.boldFields = toggledBoldFields(context.task, context.field);
+  updateRowAppearance(context.row, context.task); refreshCellTools();
+  autoSize(control);
+  if (context.row.dataset.draft !== 'true') {
+    context.task.updatedAt = new Date().toISOString();
+    void saveTask(context.task, {boldFields: context.task.boldFields, updatedAt: context.task.updatedAt});
+  }
+  control.focus({preventScroll: true});
+}
+function openLinkEditor(control = activeCell) {
+  const context = cellContext(control);
+  if (!context || !store) return;
+  linkTarget = {...context, control: context.row.querySelector('.field-ticket')};
+  el('link-address').value = context.task.ticket || '';
+  el('link-label').value = context.task.ticketLabel || '';
+  el('link-error').hidden = true;
+  el('link-dialog').showModal();
+  const input = safeURL(context.task.ticket) ? el('link-label') : el('link-address');
+  input.focus(); input.select();
+}
+el('actions-table').addEventListener('focusin', event => {
+  const control = event.target.closest('[data-field]');
+  if (control) { activeCell = control; refreshCellTools(); }
+});
+el('bold-cell').addEventListener('pointerdown', event => event.preventDefault());
+el('bold-cell').onclick = () => { void toggleSelectedBold(); };
+el('edit-ticket-link').onclick = () => openLinkEditor();
+const closeLink = () => { if (!el('save-link').disabled) el('link-dialog').close(); };
+el('close-link').onclick = closeLink; el('cancel-link').onclick = closeLink;
+el('link-dialog').addEventListener('click', event => { if (event.target === el('link-dialog')) closeLink(); });
+el('link-dialog').addEventListener('cancel', event => { if (el('save-link').disabled) event.preventDefault(); });
+el('link-dialog').addEventListener('close', () => { linkTarget = null; scheduleRender(); });
+el('link-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const context = linkTarget;
+  if (!context || el('save-link').disabled) return;
+  try {
+    const patch = linkPatch(el('link-address').value, el('link-label').value);
+    if (context.row.dataset.draft === 'true' && !patch.ticket) { closeLink(); return; }
+    if (patch.ticket === context.task.ticket && patch.ticketLabel === (context.task.ticketLabel || '')) { closeLink(); return; }
+    el('link-error').hidden = true;
+    for (const id of ['save-link', 'close-link', 'cancel-link']) el(id).disabled = true;
+    Object.assign(context.task, patch, {updatedAt: new Date().toISOString()});
+    promoteRow(context.row, context.task);
+    context.control.value = ticketText(context.task);
+    updateTicketLink(context.row, context.task); updateRowAppearance(context.row, context.task); summary();
+    layoutPending = true;
+    if (!await saveTask(context.task, {...patch, updatedAt: context.task.updatedAt})) throw new Error('Link changes need saving. Close this editor and use Retry save.');
+    el('link-dialog').close();
+    context.control.focus({preventScroll: true});
+  } catch (error) {
+    el('link-error').textContent = error.message; el('link-error').hidden = false;
+  } finally {
+    for (const id of ['save-link', 'close-link', 'cancel-link']) el(id).disabled = false;
+  }
+});
 function updateRow(row, task, draft) {
   row.dataset.account = task.account;
   row.querySelector('.calendar-button')?.setAttribute('aria-label', `Open calendar, ${task.account}, ${draft ? 'new action' : task.title || 'untitled action'}`);
   for (const control of row.querySelectorAll('[data-field]')) {
     const field = control.dataset.field;
     if (field === 'done') { control.checked = task.done; control.disabled = draft; }
-    else if (control.value !== task[field]) control.value = task[field];
+    else {
+      const value = field === 'ticket' ? ticketText(task) : task[field];
+      if (control.value !== value) control.value = value;
+    }
     if (field === 'title') control.placeholder = draft ? 'Add an action item…' : 'Action item…';
     control.setAttribute('aria-label', `${labels[field]}, ${task.account}, ${draft ? `new ${row.closest('tbody')?.dataset.bucket === 'week' ? 'this week' : 'remaining'} action` : task.title || 'untitled action'}`);
   }
-  updateTicketLink(row, task.ticket); updateRowAppearance(row, task);
+  row.querySelector('.ticket-edit-button')?.setAttribute('aria-label', `Edit ticket link, ${task.account}, ${draft ? 'new action' : task.title || 'untitled action'}`);
+  updateTicketLink(row, task); updateRowAppearance(row, task);
 }
 function bandRow(title, description, className) {
   const row = document.createElement('tr'); row.className = className;
@@ -354,6 +451,7 @@ function render({force = false} = {}) {
   el('clear-filters').hidden = !query.text && !query.account && !query.status;
   el('show-more').hidden = !archived || filtered.length <= archiveLimit;
   for (const textarea of table.querySelectorAll('textarea')) autoSize(textarea);
+  refreshCellTools();
 }
 
 async function changeCompletion(task, done, control) {
@@ -380,7 +478,7 @@ function download(filename, content, type) {
   link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 function exportJSON() {
-  download(`action-items-backup-${localDay()}.json`, JSON.stringify({format: 'action-items', version: 2, exportedAt: new Date().toISOString(), tasks: [...tasks.values()]}, null, 2), 'application/json');
+  download(`action-items-backup-${localDay()}.json`, JSON.stringify({format: 'action-items', version: 3, exportedAt: new Date().toISOString(), tasks: [...tasks.values()]}, null, 2), 'application/json');
 }
 function openData() { el('data-dialog').showModal(); }
 el('data-button').onclick = openData; el('empty-import')?.addEventListener('click', openData);
@@ -436,7 +534,12 @@ el('search').addEventListener('keydown', event => {
 document.addEventListener('keydown', event => {
   if (event.defaultPrevented || event.isComposing || event.target.closest('dialog')) return;
   const editing = event.target.closest('input, textarea, select');
-  if (((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') || (event.key === '/' && !editing)) {
+  const control = event.target.closest('#actions-table [data-field]');
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'b' && control) {
+    event.preventDefault(); void toggleSelectedBold(control);
+  } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' && control?.dataset.field === 'ticket') {
+    event.preventDefault(); openLinkEditor(control);
+  } else if (((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') || (event.key === '/' && !editing)) {
     event.preventDefault(); el('search').focus(); el('search').select();
   } else if (event.altKey && event.key.toLowerCase() === 'n' && !archived) { event.preventDefault(); newAction(event.target.closest('[data-field]')); }
   else if (event.key === '?' && !editing) { event.preventDefault(); el('keyboard-dialog').showModal(); }
