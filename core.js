@@ -113,6 +113,7 @@ export function normalizeTask(raw, index = 0) {
     }
   }
   base.account = account;
+  if(raw.entryDefaultsPending!=null){if(typeof raw.entryDefaultsPending!=='boolean')throw new Error(`Record ${index+1}: invalid entry defaults.`);base.entryDefaultsPending=raw.entryDefaultsPending;}
   if (raw.ticketLabel != null) {
     if (typeof raw.ticketLabel !== 'string' || raw.ticketLabel.length > 100000) throw new Error(`Record ${index + 1}: invalid link display text.`);
     base.ticketLabel = raw.ticketLabel;
