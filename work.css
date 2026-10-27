@@ -173,5 +173,6 @@ body[data-view="hours"] .work-main { min-width: 0; }
 .selected-activity-label strong,.work-options strong { font-weight: 700; }
 .clear-activity { position: absolute; top: 3px; right: 22px; width: 23px; height: 25px; padding: 0; border: 0; background: transparent; color: #748194; font-size: 18px; line-height: 1; }
 .clear-activity:hover { background: #e9edf3; color: #243a55; }
+.toast-undo { margin-left: 14px; padding: 0; border: 0; background: transparent; color: #fff; font: inherit; text-decoration: underline; }
 .hours-grid .hour-input { padding-left: 3px; padding-right: 6px; }
 .hours-grid thead th,.hours-grid .activity-stat { overflow: hidden; text-overflow: ellipsis; }
