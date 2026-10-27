@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {newTask, weekBounds, sectionFor, compareTasks, normalizeTask, parseImport, categoryOptions, safeURL, csvExport, matches, upgradeTask, STATUSES, FIELDS, cellIsBold, toggledBoldFields, ticketText, ticketInputPatch, linkPatch} from './core.js';
+import {localDay, newTask, weekBounds, sectionFor, compareTasks, normalizeTask, parseImport, categoryOptions, safeURL, csvExport, matches, upgradeTask, STATUSES, FIELDS, cellIsBold, toggledBoldFields, ticketText, ticketInputPatch, linkPatch} from './core.js';
 const date = new Date(2026,9,23,12);
 test('Monday-based week includes Sunday, overdue dates, and the next year boundary', () => {
   assert.deepEqual(weekBounds(date), {start:'2026-10-19',end:'2026-10-25',next:'2026-10-26'});
@@ -66,8 +66,11 @@ test('legacy status migration preserves records, explicit workflow status, and o
   assert.equal(upgradeTask({...original,status:'Ready',urgency:'Not urgent'}).status,'Not Urgent');
   assert.equal(upgradeTask({...converted,status:'Not Urgent',urgency:'Urgent'}).status,'Not Urgent');
 });
-test('new rows have no default due date and one status; export follows the requested column order', () => {
-  assert.equal(newTask('Internal').due,'');
+test('new rows default to today and Urgent with one status; export follows the requested column order', () => {
+  assert.equal(newTask('Internal').due,localDay());
+  assert.equal(newTask('Internal').status,'Urgent');
+  assert.equal(normalizeTask({id:'legacy',account:'Internal',title:'Existing'}).due,'');
+  assert.equal(normalizeTask({id:'legacy',account:'Internal',title:'Existing'}).status,'Not Urgent');
   assert.deepEqual(STATUSES,['Urgent','Waiting','Scheduled','Not Urgent']);
   assert.deepEqual(FIELDS,['account','category','title','due','status','done','notes','ticket','owner']);
   assert.equal(csvExport([]).split('\r\n')[0].replace(/^\uFEFF/,''),'"Account","Category","Action item","Due date","Status","Complete","Notes","Ticket ID / link","Owner"');
