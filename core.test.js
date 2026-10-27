@@ -104,10 +104,11 @@ test('friendly hyperlink labels and subsequent label edits retain the original d
 });
 
 test('backup imports retain bold fields, link labels, source references, and historical dates', () => {
-  const source = {...newTask('Goldman'),id:'stable',ticket:'https://example.com/42',ticketLabel:'Capacity tracker',boldFields:['notes','title'],notes:'Line one\nLine two',createdAt:null,source:{sheet:'GS',row:42}};
+  const source = {...newTask('Goldman'),id:'stable',entryDefaultsPending:true,ticket:'https://example.com/42',ticketLabel:'Capacity tracker',boldFields:['notes','title'],notes:'Line one\nLine two',createdAt:null,source:{sheet:'GS',row:42}};
   const [task] = parseImport(JSON.stringify({format:'action-items',version:3,tasks:[source]}));
   assert.deepEqual(task.boldFields,['title','notes']); assert.equal(task.ticket,source.ticket); assert.equal(task.ticketLabel,source.ticketLabel);
   assert.equal(task.notes,source.notes); assert.equal(task.createdAt,null); assert.deepEqual(task.source,source.source);
+  assert.equal(task.entryDefaultsPending,true);
   assert.equal(matches(task,'capacity tracker'),true);
   const csv = csvExport([task]);
   assert.ok(csv.includes('"Link display text"')); assert.ok(csv.includes('"https://example.com/42"')); assert.ok(csv.includes('"Capacity tracker"'));
@@ -115,7 +116,7 @@ test('backup imports retain bold fields, link labels, source references, and his
 
 test('invalid formatting metadata or unsafe labeled links reject the whole import', () => {
   const source = newTask('Internal');
-  for (const patch of [{boldFields:'title'},{boldFields:['done']},{boldFields:['unknown']},{ticketLabel:42},{ticket:'javascript:alert(1)',ticketLabel:'Unsafe'}]) {
+  for (const patch of [{entryDefaultsPending:'true'},{boldFields:'title'},{boldFields:['done']},{boldFields:['unknown']},{ticketLabel:42},{ticket:'javascript:alert(1)',ticketLabel:'Unsafe'}]) {
     assert.throws(()=>parseImport(JSON.stringify([{...source,...patch}])));
   }
   assert.deepEqual(normalizeTask({...source,boldFields:['title','title']}).boldFields,['title']);
