@@ -91,9 +91,9 @@ export function linkPatch(destination, label) {
   return {ticket, ticketLabel};
 }
 
-export function newTask(account, due = '', id = crypto.randomUUID()) {
+export function newTask(account, due = localDay(), id = crypto.randomUUID()) {
   const now = new Date().toISOString();
-  return {id, account, category: '', title: '', due, status: 'Not Urgent', statusSchema: 2, ticket: '', ticketLabel: '', boldFields: [], owner: OWNER,
+  return {id, account, category: '', title: '', due, status: 'Urgent', statusSchema: 2, ticket: '', ticketLabel: '', boldFields: [], owner: OWNER,
     done: false, notes: '', createdAt: now, updatedAt: now, completedAt: null};
 }
 
@@ -104,6 +104,7 @@ export function normalizeTask(raw, index = 0) {
   const account = aliases[sourceAccount] || sourceAccount;
   if (!ACCOUNTS.includes(account)) throw new Error(`Record ${index + 1}: unknown account "${account}".`);
   const base = newTask(account, '', String(raw.id || crypto.randomUUID()));
+  base.status = 'Not Urgent';
   for (const key of FIELDS.filter(k => k !== 'done')) {
     if (raw[key] != null) {
       if (typeof raw[key] !== 'string') throw new Error(`Record ${index + 1}: ${key} must contain text.`);
