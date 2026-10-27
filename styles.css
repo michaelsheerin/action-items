@@ -380,3 +380,28 @@ h1 { font-size: 22.5px; }
 .history-line > span:last-child { white-space: nowrap; }.history-details h3 { font-weight: 500; font-size: 12px; margin: 16px 0 5px; }
 @media(max-width:900px){.topbar { gap: 12px; flex-wrap: wrap; }.topbar-right { gap: 6px; }.brand small { display: none; }.week-heading { order: 3; }.week-toolbar .visible-count { margin-left: 0; }.work-main .page-heading { align-items: start; gap: 12px; }.work-main .heading-right { gap: 10px; }.work-main .summary { display: none; }}
 @media(max-width:500px){.activity-form-grid { grid-template-columns: 1fr; }.activity-form-grid .wide { grid-column: auto; }}
+/* Archive uses one flat table, with per-column filtering and sorting. */
+.archive-accounts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+.archive-accounts .button { font-weight: 400; min-height: 28px; padding: 4px 9px; border-radius: 3px; }
+.archive-accounts a[aria-current] { color: #fff; background: #334a68; border-color: #334a68; }
+body[data-view="archive"] .heading-right { flex-direction: column; align-items: flex-end; gap: 8px; }
+.col-completedAt { width: 100px; }
+#actions-table .cell-completed { padding: 7px; color: #61748c; font-size: 10px; white-space: nowrap; }
+.archive-sort { width: 100%; border: 0; padding: 0 7px 0 0; color: inherit; background: transparent; text-align: left; font: inherit; cursor: pointer; }
+th[aria-sort="ascending"] .archive-sort::after { content: ' ↑'; }
+th[aria-sort="descending"] .archive-sort::after { content: ' ↓'; }
+#actions-table .archive-column-filters th { background: #eef2f7; padding: 3px 4px; border-bottom: 1px solid #aebfd3; box-shadow: inset -1px 0 #d4dde9; }
+.archive-column-filters input { display: block; min-width: 0; width: 100%; border: 1px solid transparent; border-radius: 0; background: transparent; color: #243a55; padding: 4px; font: inherit; font-size: 10px; }
+.archive-column-filters input:focus { border-color: #7295c3; background: #fff; outline: none; }
+#archive-page-size { border: 1px solid #b6c6da; border-radius: 3px; padding: 4px 6px; background: #fff; color: #3b526f; font: inherit; font-size: 10px; }
+.quick-dates { position: fixed; z-index: 100; width: 282px; padding: 10px; border: 1px solid #a2b5ce; border-radius: 4px; background: #fff; color: #243a55; box-shadow: 0 5px 22px #183b6326; font-size: 11px; }
+.quick-dates button { border: 1px solid transparent; border-radius: 3px; background: transparent; color: inherit; padding: 6px; font: inherit; cursor: pointer; }
+.quick-dates button:hover,.quick-dates button:focus-visible { border-color: #a1bbdb; background: #e8f0fc; }
+.date-shortcuts { display: flex; gap: 4px; justify-content: space-between; }
+.date-shortcuts button { background: #eef3fa; flex: 1; }
+.date-period { display: flex; align-items: center; justify-content: space-between; margin: 7px 0; color: #5b6d83; font-size: 10px; }
+.date-period button { font-size: 18px; padding: 0 8px; }
+.date-choices { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; margin-bottom: 9px; text-align: center; }
+.date-choices > span { padding: 4px; color: #7f8c9e; font-size: 10px; }
+.date-choices .date-today { border-color: #93afd3; }
+.date-choices button[aria-pressed="true"] { background: #334a68; color: #fff; }
