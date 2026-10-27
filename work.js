@@ -1,8 +1,8 @@
-import {WORK_ACCOUNTS,today,addDays,weekDays,fiscalQuarter,formatHours,parseHours,units,historyFor,totalsFor,rankActivities,activityLabel,recommendations,validateActivity,validateImport} from './work-core.js?v=13';
-import {openWorkStore} from './work-store.js?v=13';
-import {attachPicker} from './work-picker.js?v=13';
-import {installColumnSizing} from './columns.js?v=13';
-import {createQuarterView} from './quarter.js?v=13';
+import {WORK_ACCOUNTS,today,addDays,weekDays,fiscalQuarter,formatHours,parseHours,units,historyFor,totalsFor,rankActivities,activityLabel,recommendations,validateActivity,validateImport} from './work-core.js?v=15';
+import {openWorkStore} from './work-store.js?v=15';
+import {attachPicker,renderActivityLabel} from './work-picker.js?v=15';
+import {installColumnSizing} from './columns.js?v=15';
+import {createQuarterView} from './quarter.js?v=15';
 
 const isHours=document.body.dataset.view==='hours', $=id=>document.getElementById(id);
 let store, data={activities:[],entries:[],historical:[]}, days=weekDays(), rowSlots={}, views=[], pickers=[], pending=0, editId=null, generation=0, syncNeeded=false;
@@ -10,6 +10,7 @@ const failed=new Map(), channel='BroadcastChannel' in window?new BroadcastChanne
 const quarter=fiscalQuarter();
 const widthSetting=isHours?'columns:hours':'columns:activities';
 let columnSizing, savedWidths=null, quarterView;
+let hiddenActivities=new Set();
 const app=$('app');
 app.innerHTML=`
 <header class="topbar"><a class="brand" href="./" aria-label="Action Items home"><span class="brand-mark" aria-hidden="true">✓</span><span>Action Items<small>Michael Sheerin’s workspace</small></span></a><nav aria-label="Pages"><a href="./">Action items</a><a href="./hours.html" ${isHours?'aria-current="page"':''}>Hours</a><a href="./activities.html" ${!isHours?'aria-current="page"':''}>Activities</a><a href="./archive.html">Archive</a></nav><div class="topbar-right"><span id="work-save" class="save-state" role="status">Loading…</span><button id="work-data" class="button">Data & backup</button><span class="avatar" title="Michael Sheerin">MS</span></div></header>
@@ -32,7 +33,7 @@ ${isHours?`<div class="work-toolbar"><div class="week-controls"><button id="prev
 
 function node(tag,text,className){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(className)e.className=className;return e;}
 function shortDate(iso,year=false){return new Date(`${iso}T12:00:00`).toLocaleDateString('en-US',{month:'short',day:'numeric',...(year?{year:'numeric'}:{})});}
-function accounts(){return [...new Set([...WORK_ACCOUNTS,...data.activities.map(a=>a.account)])].filter(a=>a.toLowerCase()!=='claritev');}
+function accounts(){return [...new Set([...WORK_ACCOUNTS,...data.activities.map(a=>a.account)])];}
 function activity(id){return data.activities.find(a=>a.id===id);}
 function replaceRecord(key,value){const i=data[key].findIndex(e=>e.id===value.id);if(i<0)data[key].push(value);else data[key][i]=value;}
 function status(){const e=$('work-save'),invalid=$('work-table').querySelector('[aria-invalid="true"]');e.textContent=invalid?'Correct invalid hours':pending?'Saving…':failed.size?'Changes need saving':'Saved';e.className=`save-state ${invalid?'failed':pending?'saving':failed.size?'failed':'saved'}`;}
@@ -44,7 +45,7 @@ async function persist(key,value){
   catch(e){error(`The edit is still on screen but has not saved. ${e.message} Retry save or download a backup.`);return false;}
   finally{pending--;status();}
 }
-async function saveSlots(){const id=`rows:${days[0]}`, value=Object.fromEntries(Object.entries(rowSlots).map(([a,s])=>[a,[...s]]));try{await store.setting(id,value);}catch(e){error(`Hours are saved separately. Row preferences did not save. ${e.message}`);}}
+async function saveSlots(){const id=`rows:${days[0]}`, value=Object.fromEntries(Object.entries(rowSlots).map(([a,s])=>[a,[...s]]));try{await Promise.all([store.setting(id,value),store.setting(`hidden-activities:${days[0]}`,[...hiddenActivities])]);}catch(e){error(`Hours are saved separately. Row preferences did not save. ${e.message}`);}}
 function summary(){
   const total=(data.entries.reduce((s,e)=>s+units(e.hours),0)+data.historical.reduce((s,h)=>s+units(h.hours),0))/100;
   
@@ -56,6 +57,7 @@ function summary(){
 function sizeColumns(fields){
   columnSizing?.destroy();
   columnSizing=installColumnSizing($('work-table'),fields,{
+    fitToContainer:isHours,
     minimums:{activity:220,total:55,quarter:60,week:65,mon:45,tue:45,wed:45,thu:45,fri:45,sat:45,sun:45,oppId:65,stage:80,activityName:100,personalName:100,description:120,artifactAdded:65,edit:45},
     onChange:widths=>{savedWidths=widths;return store.setting(widthSetting,widths);},
     onResize:()=>pickers.forEach(p=>p.refresh()),
@@ -94,6 +96,9 @@ function updateTotals(){
 }
 function populateHours(v){
   const a=activity(v.id);v.selector.value=a?activityLabel(a):'';v.selector.title=a?`${a.activityName}\n${a.description}`:'';v.tr.classList.toggle('blank-activity-row',!a);
+  v.selectorCell.classList.toggle('has-activity',Boolean(a));v.clear.hidden=!a;
+  if(a)renderActivityLabel(v.display,a);else v.display.replaceChildren();
+  v.display.title=a?activityLabel(a):'';
   v.inputs.forEach((input,i)=>{const h=a?historyFor(data.historical,a.id,days[i]):null,entry=a?data.entries.find(e=>e.activityId===a.id&&e.date===days[i]):null;
     input.value=entry?.hours?String(entry.hours):'';input.disabled=!a||Boolean(h);input.placeholder='';input.title=h?`${h.period}: ${formatHours(h.hours)} historical hours. Daily details unavailable.`:'';
     input.setAttribute('aria-label',`${a?a.personalName:'Choose activity first'}, ${v.account}, ${days[i]}`);input.setCustomValidity('');input.removeAttribute('aria-invalid');input.closest('td').classList.toggle('historical-cell',Boolean(h));
@@ -103,7 +108,10 @@ function populateHours(v){
 function makeHoursRow(account,index,body){
   const tr=node('tr',undefined,'hours-record'),selectorCell=node('td',undefined,'activity-picker-cell'),selector=node('input');selector.type='text';selector.placeholder='Choose activity…';selector.className='activity-selector';selector.dataset.field='activity';selector.setAttribute('aria-label',`Activity, ${account}, row ${index+1}`);selectorCell.append(selector);tr.append(selectorCell);
   const stats=['total','quarter','week'].map(field=>{const td=node('td','','numeric activity-stat');td.dataset.field=field;return td;});tr.append(...stats.slice(0,2));
-  const v={tr,selector,stats,inputs:[],account,index,id:rowSlots[account][index]||''};views.push(v);
+  const display=node('span',undefined,'selected-activity-label'),clear=node('button','×','clear-activity');display.setAttribute('aria-hidden','true');clear.type='button';clear.setAttribute('aria-label',`Clear activity selection, ${account}, row ${index+1}`);clear.title='Clear selection. Logged hours stay saved.';selectorCell.append(display,clear);
+  const v={tr,selector,selectorCell,display,clear,stats,inputs:[],account,index,id:rowSlots[account][index]||''};views.push(v);
+  clear.addEventListener('pointerdown',event=>event.preventDefault());
+  clear.onclick=()=>{const old=v.id;if(!old)return;hiddenActivities.add(old);v.id='';rowSlots[account][index]='';populateHours(v);void saveSlots();selector.focus();if(data.entries.some(e=>e.activityId===old&&days.includes(e.date)&&e.hours>0))toast('Selection cleared. Logged hours stay saved and included in totals.');};
   for(let i=0;i<7;i++){
     const td=node('td',undefined,'hours-entry-cell'),input=node('input');input.type='text';input.inputMode='decimal';input.autocomplete='off';input.className='hour-input';input.dataset.day=i;input.dataset.field=['mon','tue','wed','thu','fri','sat','sun'][i];
     input.addEventListener('input',()=>{
@@ -113,10 +121,10 @@ function makeHoursRow(account,index,body){
     input.addEventListener('blur',()=>{if(!input.checkValidity()){input.reportValidity();}else status();});td.append(input);tr.append(td);v.inputs.push(input);
   }
   tr.append(stats[2]);
-  pickers.push(attachPicker(selector,{options:()=>rankActivities(data.activities,data.entries,data.historical,account).filter(a=>a.id===v.id||!rowSlots[account].includes(a.id)).map(a=>({id:a.id,label:activityLabel(a),search:[activityLabel(a),a.activityName,a.description].join(' '),hours:a.hours})),onSelect:item=>{
+  pickers.push(attachPicker(selector,{options:()=>rankActivities(data.activities,data.entries,data.historical,account).filter(a=>a.id===v.id||!rowSlots[account].includes(a.id)).map(a=>({id:a.id,label:activityLabel(a),search:[activityLabel(a),a.activityName,a.description].join(' '),hours:a.hours,activity:a})),onSelect:item=>{
     if(!item){selector.value=v.id?activityLabel(activity(v.id)):'';return;}
     if(item.id===v.id)return;
-    const old=v.id;v.id=item.id;rowSlots[account][index]=item.id;populateHours(v);
+    const old=v.id;v.id=item.id;hiddenActivities.delete(item.id);rowSlots[account][index]=item.id;populateHours(v);
     // Switching the chooser never discards hours already entered for another activity.
     if(old&&data.entries.some(e=>e.activityId===old&&days.includes(e.date)&&e.hours>0)&&!rowSlots[account].includes(old)){const pos=rowSlots[account].length;rowSlots[account].push(old);body.insertBefore(makeHoursRow(account,pos,body),body.querySelector('.hours-add-row'));}
     void saveSlots();v.inputs.find(e=>!e.disabled)?.focus();
@@ -124,7 +132,7 @@ function makeHoursRow(account,index,body){
   populateHours(v);return tr;
 }
 async function renderWeek(){
-  const pass=++generation,week=[...days],saved=await store.setting(`rows:${week[0]}`);if(pass!==generation)return;
+  const pass=++generation,week=[...days],[saved,hidden]=await Promise.all([store.setting(`rows:${week[0]}`),store.setting(`hidden-activities:${week[0]}`)]);if(pass!==generation)return;hiddenActivities=new Set(Array.isArray(hidden)?hidden:[]);
   for(const p of pickers)p.destroy();pickers=[];views=[];rowSlots={};
   $('week-date').value=days[0];$('week-heading').textContent=`${shortDate(days[0])} – ${shortDate(days[6],true)}`;$('quarter-label').textContent=quarter.label;$('quarter-label').title=`This quarter: ${shortDate(quarter.start,true)} to ${shortDate(quarter.end,true)}`;
   const table=$('work-table');columnSizing?.destroy();table.replaceChildren();const cols=node('colgroup');for(const c of ['chooser','stat','stat',...days.map(()=> 'day'),'stat'])cols.append(node('col',undefined,`hours-col-${c}`));table.append(cols);
@@ -133,7 +141,7 @@ async function renderWeek(){
     const accountIds=new Set(data.activities.filter(a=>a.account===account).map(a=>a.id)),used=new Set();
     rowSlots[account]=(Array.isArray(saved?.[account])?saved[account]:[]).filter(id=>{if(id==='')return true;if(!accountIds.has(id)||used.has(id))return false;used.add(id);return true;});
     const withHours=rankActivities(data.activities,data.entries,data.historical,account).filter(a=>data.entries.some(e=>e.activityId===a.id&&week.includes(e.date)&&e.hours>0));
-    const missing=withHours.filter(a=>!used.has(a.id)).map(a=>a.id);rowSlots[account].unshift(...missing);
+    const missing=withHours.filter(a=>!used.has(a.id)&&!hiddenActivities.has(a.id)).map(a=>a.id);rowSlots[account].unshift(...missing);
     while(rowSlots[account].filter(id=>!id).length<3)rowSlots[account].push('');
     const body=node('tbody');body.dataset.account=account;body.append(band(account,11));table.append(body);
     rowSlots[account].forEach((_,i)=>body.append(makeHoursRow(account,i,body)));
@@ -160,7 +168,14 @@ for(const field of ['account','oppId','stage','activityName'])attachPicker($(`ac
 if(isHours){
   $('previous-week').onclick=()=>changeWeek(addDays(days[0],-7));$('next-week').onclick=()=>changeWeek(addDays(days[0],7));$('current-week').onclick=()=>changeWeek(today());
   $('week-date').onchange=()=>{if($('week-date').value)changeWeek($('week-date').value);};
-  $('work-table').addEventListener('keydown',event=>{if(!(event.ctrlKey&&event.altKey)||!['ArrowUp','ArrowDown'].includes(event.key))return;const input=event.target;if(!input.classList.contains('hour-input'))return;const current=views.findIndex(v=>v.inputs.includes(input));const step=event.key==='ArrowDown'?1:-1;for(let i=current+step;i>=0&&i<views.length;i+=step){const next=views[i].inputs[Number(input.dataset.day)];if(!next.disabled){event.preventDefault();next.focus();next.select();return;}}});
+  $('work-table').addEventListener('keydown',event=>{
+    const input=event.target,legacy=event.ctrlKey&&event.altKey&&['ArrowUp','ArrowDown'].includes(event.key);
+    if(!input.classList.contains('hour-input')||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)||(!legacy&&(event.altKey||event.ctrlKey||event.metaKey||event.shiftKey)))return;
+    event.preventDefault();const ordered=[...$('work-table').querySelectorAll('.hours-record')].map(tr=>views.find(v=>v.tr===tr)),current=ordered.findIndex(v=>v.inputs.includes(input)),day=Number(input.dataset.day);let next;
+    if(['ArrowLeft','ArrowRight'].includes(event.key))next=ordered[current]?.inputs[day+(event.key==='ArrowRight'?1:-1)];
+    else {const step=event.key==='ArrowDown'?1:-1;for(let i=current+step;i>=0&&i<ordered.length;i+=step){const candidate=ordered[i].inputs[day];if(!candidate.disabled){next=candidate;break;}}}
+    if(next&&!next.disabled){next.focus();next.select();}
+  });
 }else $('activity-search').addEventListener('input',renderActivities);
 function changeWeek(date){const invalid=$('work-table').querySelector('[aria-invalid="true"]');if(invalid){invalid.focus();invalid.reportValidity();return;}days=weekDays(date);void renderWeek();}
 document.addEventListener('keydown',event=>{
