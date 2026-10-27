@@ -1,7 +1,9 @@
-import {ACCOUNTS, OWNER, STATUSES, FIELDS, localDay, weekBounds, sectionFor, compareTasks, matches, categoryOptions, safeURL, newTask, parseImport, csvExport, cellIsBold, toggledBoldFields, ticketText, ticketInputPatch, linkPatch} from './core.js?v=10';
-import {openStore} from './store.js?v=10';
-import {installColumnSizing} from './columns.js?v=10';
+import {ACCOUNTS, OWNER, STATUSES, FIELDS, localDay, weekBounds, sectionFor, compareTasks, matches, categoryOptions, safeURL, newTask, parseImport, csvExport, cellIsBold, toggledBoldFields, ticketText, ticketInputPatch, linkPatch} from './core.js?v=15';
+import {openStore} from './store.js?v=15';
+import {installColumnSizing} from './columns.js?v=15';
 import {inlineCompletion, reconcileChildren, installGridKeys} from './interactions.js?v=7';
+import {archiveMatches,compareArchived} from './archive-tools.js?v=15';
+import {openQuickDates,quickDatesOpen} from './quick-dates.js?v=15';
 
 const archived = document.body.dataset.view === 'archive';
 const app = document.querySelector('#app');
@@ -9,7 +11,10 @@ let store;
 let tasks = new Map();
 let pending = 0;
 let saveFailed = false;
-let archiveLimit = 50;
+let archiveLimit = 100;
+let archivePage=0,archiveCriteria='';
+let archiveSort = {field:'completedAt',direction:'desc'};
+const archiveFilters = {};
 let toastTimer;
 let renderTimer;
 let retryEdits = new Map();
@@ -53,6 +58,30 @@ app.innerHTML = `
 `;
 
 const el = id => document.getElementById(id);
+if (archived) {
+  const accountParam=new URLSearchParams(location.search).get('account');
+  if(ACCOUNTS.includes(accountParam))query.account=accountParam;
+  const links=document.createElement('nav');links.className='archive-accounts';links.setAttribute('aria-label','Archive accounts');
+  for(const account of ['',...ACCOUNTS]){const a=document.createElement('a');a.className='button';a.textContent=account||'All accounts';a.href=account?`./archive.html?account=${encodeURIComponent(account)}`:'./archive.html';if(account===query.account)a.setAttribute('aria-current','page');links.append(a);}
+  el('summary').before(links);
+  document.querySelector('h1').textContent=query.account?`${query.account} completed actions`:'Completed actions';
+  document.title=query.account?`${query.account} Archive · Action Items`:'Archive · Action Items';
+  el('actions-table').querySelector('caption').textContent='Completed actions. Sort by a column heading or filter individual columns.';
+  const col=document.createElement('col');col.className='col-completedAt';el('actions-table').querySelector('colgroup').append(col);
+  const completedHead=document.createElement('th');completedHead.scope='col';completedHead.dataset.column='completedAt';completedHead.textContent='Completed';el('actions-table').querySelector('thead tr').append(completedHead);
+  const filterRow=document.createElement('tr');filterRow.className='archive-column-filters';
+  for(const head of el('actions-table').querySelectorAll('thead tr:first-child th')){
+    const field=head.dataset.column,cell=document.createElement('th');
+    if(field!=='done'){
+      const button=document.createElement('button');button.type='button';button.className='archive-sort';button.textContent=head.textContent;button.setAttribute('aria-label',`Sort by ${head.textContent}`);button.onclick=()=>{archiveSort={field,direction:archiveSort.field===field&&archiveSort.direction==='asc'?'desc':'asc'};render();};head.replaceChildren(button);
+      if(!['account','status'].includes(field)){const input=document.createElement('input');input.type='search';input.placeholder=['due','completedAt'].includes(field)?'YYYY-MM-DD':'Filter…';input.setAttribute('aria-label',`Filter ${field==='completedAt'?'Completed':labels[field]}`);input.addEventListener('input',()=>{archiveFilters[field]=input.value;render();});cell.append(input);}
+    }
+    filterRow.append(cell);
+  }
+  el('actions-table').querySelector('thead').append(filterRow);
+  const pageSize=document.createElement('select');pageSize.id='archive-page-size';pageSize.setAttribute('aria-label','Completed rows per page');for(const [value,label] of [['100','100 rows'],['50','50 rows']])pageSize.append(new Option(label,value));pageSize.onchange=()=>{archivePage=0;archiveLimit=Number(pageSize.value);render();};el('visible-count').before(pageSize);
+  const previous=document.createElement('button');previous.id='archive-previous';previous.className='text-button';previous.textContent='Previous page';previous.onclick=()=>{archivePage=Math.max(0,archivePage-1);render();el('actions-table').closest('.table-wrap').scrollTop=0;};el('show-more').before(previous);el('show-more').textContent='Next page';
+}
 const cellTools = document.createElement('div'); cellTools.className = 'cell-tools'; cellTools.setAttribute('role', 'group'); cellTools.setAttribute('aria-label', 'Cell formatting');
 cellTools.innerHTML = '<button id="bold-cell" class="format-button" type="button" aria-label="Bold selected cell" aria-pressed="false" title="Bold selected cell (Ctrl+B)" disabled><span aria-hidden="true">B</span></button><button id="edit-ticket-link" class="format-button" type="button" aria-label="Edit ticket link" title="Edit ticket link and display text (Ctrl+K in the ticket cell)" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m8 12 4-4m-5 6-1 1a3 3 0 0 1-4-4l3-3a3 3 0 0 1 4 0m2 4a3 3 0 0 0 4 0l3-3a3 3 0 0 0-4-4l-1 1"/></svg></button>';
 el('visible-count').before(cellTools);
@@ -61,6 +90,7 @@ el('keyboard-dialog').querySelector('.shortcut-list').append(shortcut);
 const linkShortcut = document.createElement('div'); linkShortcut.innerHTML = '<dt>Edit ticket link / display text</dt><dd><kbd>Ctrl K</kbd> in Ticket ID / link</dd>';
 el('keyboard-dialog').querySelector('.shortcut-list').append(linkShortcut);
 for (const account of ACCOUNTS) el('account-filter').append(new Option(account, account));
+el('account-filter').value=query.account;
 function shortDate(iso, options = {}) { return new Date(`${iso}T12:00:00`).toLocaleDateString('en-US', {month: 'short', day: 'numeric', ...options}); }
 function setSaveState() {
   const node = el('save-state');
@@ -98,7 +128,7 @@ async function saveTask(task, patch) {
   } finally { pending--; setSaveState(); if (!pending && syncPending && !editingCell()) void syncFromStore(); }
 }
 
-function editingCell() { return Boolean(document.activeElement?.closest('#actions-table [data-field]') || el('link-dialog').open); }
+function editingCell() { return Boolean(document.activeElement?.closest('#actions-table [data-field]') || el('link-dialog').open || quickDatesOpen()); }
 function mergeTasks(fresh) {
   tasks = new Map(fresh.map(task => {
     const existing = tasks.get(task.id);
@@ -127,6 +157,12 @@ function autoSize(control) {
   const height = Math.max(29, control.scrollHeight + 2);
   control.style.height = `${Math.min(160, height)}px`;
   control.style.overflowY = height > 160 ? 'auto' : 'hidden';
+}
+function autoSizeMany(controls) {
+  const visible=[...controls].filter(control=>control.getClientRects().length);
+  for(const control of visible)control.style.height='0px';
+  const heights=visible.map(control=>Math.max(29,control.scrollHeight+2));
+  visible.forEach((control,index)=>{control.style.height=`${Math.min(160,heights[index])}px`;control.style.overflowY=heights[index]>160?'auto':'hidden';});
 }
 function updateRowAppearance(row, task) {
   row.dataset.status = task.status;
@@ -242,10 +278,11 @@ function makeRow(task, draft = false, bucket = '') {
         picker.setAttribute('aria-label', `Open calendar, ${task.account}, ${draft ? 'new action' : task.title || 'untitled action'}`);
         picker.title = 'Choose a due date. Alt+Down or F4 also opens the calendar.';
         picker.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="5" width="13" height="12" rx="2"/><path d="M6.5 3v4m7-4v4m-10 2h13"/></svg>';
-        const openPicker = () => { control.focus({preventScroll: true}); try { control.showPicker(); } catch {} };
+        const openPicker = () => { control.focus({preventScroll: true}); openQuickDates(control,scheduleRender); };
         picker.onclick = openPicker;
+        control.addEventListener('pointerdown',event=>{if(event.button===0){event.preventDefault();openPicker();}});
         control.addEventListener('keydown', event => {
-          if (event.key === 'F4' || (event.altKey && !event.ctrlKey && event.key === 'ArrowDown')) {
+          if (event.key === 'Enter' || event.key === 'F4' || (event.altKey && !event.ctrlKey && event.key === 'ArrowDown')) {
             event.preventDefault(); event.stopPropagation(); openPicker();
           }
         });
@@ -265,6 +302,7 @@ function makeRow(task, draft = false, bucket = '') {
 function rowFor(task, draft = false, bucket = '') {
   let row = rowViews.get(task.id);
   if (!row) { row = makeRow(task, draft, bucket); rowViews.set(task.id, row); }
+  if(archived){let cell=row.querySelector('.cell-completed');if(!cell){cell=document.createElement('td');cell.className='cell-completed';row.append(cell);}cell.textContent=task.completedAt?shortDate(localDay(new Date(task.completedAt)),{year:'numeric'}):'';cell.title=task.completedAt?new Date(task.completedAt).toLocaleString():'';}
   return row;
 }
 function cellContext(control = activeCell) {
@@ -392,7 +430,7 @@ function subsectionRow(account, section, group) {
       else { expandedRemaining.add(account); collapsedSearch.delete(account); }
       group.hidden = !remainingOpen(account);
       bar.setAttribute('aria-expanded', String(!group.hidden));
-      if (!group.hidden) for (const textarea of group.querySelectorAll('textarea')) autoSize(textarea);
+      if (!group.hidden) autoSizeMany(group.querySelectorAll('textarea'));
     };
   }
   cell.append(bar); row.append(cell); return row;
@@ -423,11 +461,21 @@ function render({force = false} = {}) {
   if (!force && editingCell()) { layoutPending = true; summary(); return; }
   layoutPending = false;
   const table = el('actions-table');
-  if (!accountViews.size) initializeGroups();
+  if (!archived && !accountViews.size) initializeGroups();
   const all = [...tasks.values()];
-  const filtered = all.filter(t => t.done === archived && matches(t, query.text, query.account, query.status));
-  const list = archived ? filtered.sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || '') || compareTasks(a, b)).slice(0, archiveLimit) : filtered;
-  for (const account of ACCOUNTS) {
+  const filtered = all.filter(t => t.done === archived && matches(t, query.text, query.account, query.status) && (!archived || archiveMatches(t,archiveFilters)));
+  if(archived){const criteria=JSON.stringify([query,archiveFilters,archiveSort]);if(criteria!==archiveCriteria){archivePage=0;archiveCriteria=criteria;}archivePage=Math.min(archivePage,Math.max(0,Math.ceil(filtered.length/archiveLimit)-1));}
+  const list = archived ? filtered.sort((a,b)=>compareArchived(a,b,archiveSort)).slice(archivePage*archiveLimit,(archivePage+1)*archiveLimit) : filtered;
+  if(archived){
+    let body=table.querySelector('.archive-records');if(!body){body=document.createElement('tbody');body.className='account-records archive-records';table.append(body);}
+    const rows=list.map(record=>rowFor(record,false,'archive'));reconcileChildren(body,rows);for(const row of rows)updateRow(row,tasks.get(row.dataset.id),false);
+    for(const head of table.querySelectorAll('thead tr:first-child th'))head.setAttribute('aria-sort',head.dataset.column===archiveSort.field?(archiveSort.direction==='asc'?'ascending':'descending'):'none');
+    document.querySelector('h1').textContent=query.account?`${query.account} completed actions`:'Completed actions';
+    document.title=query.account?`${query.account} Archive · Action Items`:'Archive · Action Items';
+    for(const link of document.querySelectorAll('.archive-accounts a')){if((new URL(link.href).searchParams.get('account')||'')===query.account)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
+    const url=new URL(location.href);if(query.account)url.searchParams.set('account',query.account);else url.searchParams.delete('account');if(url.href!==location.href)history.replaceState(null,'',url);
+  }
+  for (const account of archived ? [] : ACCOUNTS) {
     const accountRecords = list.filter(t => t.account === account);
     const view = accountViews.get(account);
     const hidden = Boolean(query.account && query.account !== account) || ((archived || query.text.trim() || query.status) && !accountRecords.length);
@@ -450,11 +498,12 @@ function render({force = false} = {}) {
     }
   }
   refreshCategories(); summary();
-  el('visible-count').textContent = `${filtered.length} ${archived ? 'completed' : 'active'} ${filtered.length === 1 ? 'action' : 'actions'}`;
+  el('visible-count').textContent = archived?`${filtered.length?archivePage*archiveLimit+1:0}–${archivePage*archiveLimit+list.length} of ${filtered.length} completed actions`:`${filtered.length} active ${filtered.length === 1 ? 'action' : 'actions'}`;
   el('empty-state').hidden = archived ? filtered.length > 0 : all.some(t => !t.done);
-  el('clear-filters').hidden = !query.text && !query.account && !query.status;
-  el('show-more').hidden = !archived || filtered.length <= archiveLimit;
-  for (const textarea of table.querySelectorAll('textarea')) autoSize(textarea);
+  el('clear-filters').hidden = !query.text && !query.account && !query.status && !Object.values(archiveFilters).some(Boolean);
+  el('show-more').hidden = !archived || filtered.length <= (archivePage+1)*archiveLimit;
+  if(archived)el('archive-previous').hidden=archivePage===0;
+  autoSizeMany(table.querySelectorAll('textarea'));
   refreshCellTools();
 }
 
@@ -512,8 +561,8 @@ el('retry-save').onclick = async () => {
 el('search').oninput = event => { query.text = event.target.value; collapsedSearch.clear(); render(); };
 el('account-filter').onchange = event => { query.account = event.target.value; render(); };
 el('status-filter').onchange = event => { query.status = event.target.value; collapsedSearch.clear(); render(); };
-el('clear-filters').onclick = () => { query.text = ''; query.account = ''; query.status = ''; collapsedSearch.clear(); el('search').value = ''; el('account-filter').value = ''; el('status-filter').value = ''; render(); };
-el('show-more').onclick = () => { archiveLimit += 50; render(); };
+el('clear-filters').onclick = () => { query.text = ''; query.account = ''; query.status = ''; for(const key of Object.keys(archiveFilters))delete archiveFilters[key];for(const input of document.querySelectorAll('.archive-column-filters input'))input.value='';collapsedSearch.clear(); el('search').value = ''; el('account-filter').value = ''; el('status-filter').value = ''; render(); };
+el('show-more').onclick = () => { archivePage++;render();el('actions-table').closest('.table-wrap').scrollTop=0; };
 function newAction(control) {
   if (archived || !store) return;
   const row = control?.closest('tr[data-id]');
@@ -567,12 +616,12 @@ setInterval(() => { if (localDay() !== currentDay && !editingCell()) {currentDay
 
 try {
   store = await openStore();
-  const sizing = installColumnSizing(el('actions-table'), FIELDS, {
-    onChange: widths => store.setting('column-widths', widths),
+  const sizing = installColumnSizing(el('actions-table'), archived?[...FIELDS,'completedAt']:FIELDS, {
+    onChange: widths => store.setting(archived?'archive-column-widths':'column-widths', widths),
     onError: error => toast(error.message),
-    onResize: () => { for (const textarea of el('actions-table').querySelectorAll('textarea')) autoSize(textarea); }
+    onResize: () => { autoSizeMany(el('actions-table').querySelectorAll('textarea')); }
   });
-  sizing.restore(await store.setting('column-widths'));
+  sizing.restore(await store.setting(archived?'archive-column-widths':'column-widths'));
   el('reset-widths').onclick = () => sizing.reset();
   mergeTasks(await store.all());
   render(); setSaveState();
