@@ -1,4 +1,4 @@
-export const WORK_ACCOUNTS = ['Goldman', 'Uber', 'Paramount'];
+export const WORK_ACCOUNTS = ['Goldman', 'Uber', 'Paramount', 'Claritev'];
 export const today = () => dayString(new Date());
 export function dayString(date) { return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`; }
 export function validDate(value) { return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && dayString(new Date(`${value}T12:00:00`)) === value; }
@@ -29,7 +29,7 @@ export function totalsFor(activityId, entries, historical, days, quarter = fisca
 export function rankActivities(activities, entries, historical, account) {
   return activities.filter(a=>!account || a.account===account).map(a=>({...a,hours:totalsFor(a.id,entries,historical,[]).total})).sort((a,b)=>b.hours-a.hours || a.personalName.localeCompare(b.personalName) || a.oppId.localeCompare(b.oppId));
 }
-export function activityLabel(a) { return [a.oppId || 'No Opp ID',a.personalName,a.stage || 'No stage',a.description.trim().replace(/\s+/g,' ')].join(' | '); }
+export function activityLabel(a) { return `${a.oppId || 'No Opp ID'} | ${a.personalName} | ${a.stage || 'No stage'} -- ${a.description.trim().replace(/\s+/g,' ')}`; }
 export function quarterProgress(activities, entries, historical, asOf = today()) {
   const quarter = fiscalQuarter(asOf), weeks = [];
   for(let monday = weekDays(quarter.start)[0]; monday <= asOf; monday = addDays(monday,7)) {
@@ -70,7 +70,6 @@ export function validateActivity(raw) {
   const a = {id:cleanText(raw.id,200)}; if(!a.id)throw new Error('Activity ID is missing.');
   for(const key of ['account','oppId','stage','activityName','personalName','description']) a[key]=cleanText(raw[key] ?? '',key==='description'?20000:500);
   if(!a.account || !a.personalName || !a.activityName)throw new Error('Account, Activity Name, and Personal Name are required.');
-  if(a.account.toLowerCase()==='claritev')throw new Error('Claritev is excluded from Activities and Hours for now.');
   a.artifactAdded=raw.artifactAdded===true;
   if(raw.source && typeof raw.source==='object')a.source=raw.source;
   if(raw.updatedAt)a.updatedAt=cleanText(raw.updatedAt,50);
