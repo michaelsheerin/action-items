@@ -1,7 +1,7 @@
 const MINIMUM = {account: 64, category: 64, title: 80, due: 86, status: 84, done: 36, notes: 80, ticket: 64, owner: 64};
 const MAXIMUM = 2000;
 
-export function installColumnSizing(table, fields, {onChange, onResize, onError, minimums = {}}) {
+export function installColumnSizing(table, fields, {onChange, onResize, onError, minimums = {}, fitToContainer = false}) {
   const headers = [...table.querySelectorAll('thead th')];
   const columns = [...table.querySelectorAll('colgroup col')];
   let widths = null;
@@ -17,10 +17,10 @@ export function installColumnSizing(table, fields, {onChange, onResize, onError,
   function apply() {
     if (!widths) return;
     fields.forEach((field, index) => {
-      columns[index].style.width = `${widths[field]}px`;
+      columns[index].style.width = fitToContainer ? `${widths[field]/fields.reduce((sum,key)=>sum+widths[key],0)*100}%` : `${widths[field]}px`;
     });
     table.style.minWidth = '100%';
-    table.style.width = `${fields.reduce((total, field) => total + widths[field], 0)}px`;
+    table.style.width = fitToContainer ? '100%' : `${fields.reduce((total, field) => total + widths[field], 0)}px`;
     syncAria();
     resizeText();
   }
