@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "scripts": {"test": "node --test core.test.js interactions.test.js work.test.js", "start": "node serve.mjs"},
+  "scripts": {"test": "node --test core.test.js interactions.test.js work.test.js archive.test.js", "start": "node serve.mjs"},
   "description": "A keyboard-friendly action table with local autosave and a completed archive."
 }
