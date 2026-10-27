@@ -1,4 +1,9 @@
 let sequence=0;
+export function renderActivityLabel(container,activity) {
+  const opp=document.createElement('span'),name=document.createElement('strong');
+  opp.className='activity-label-opp';opp.textContent=activity.oppId||'No Opp ID';name.textContent=activity.personalName;
+  container.replaceChildren(opp,document.createTextNode(' | '),name,document.createTextNode(` | ${activity.stage||'No stage'} -- ${activity.description.trim().replace(/\s+/g,' ')}`));
+}
 export function attachPicker(input,{options,onSelect,freeText=false}) {
   const id=`picker-${++sequence}`, popup=document.createElement('div'); popup.id=id;popup.className='work-options';popup.role='listbox';popup.hidden=true;document.body.append(popup);
   input.setAttribute('role','combobox');input.setAttribute('aria-autocomplete','list');input.setAttribute('aria-expanded','false');input.setAttribute('aria-controls',id);input.autocomplete='off';
@@ -12,7 +17,7 @@ export function attachPicker(input,{options,onSelect,freeText=false}) {
     items=options().filter(o=>words.every(w=>(o.search||o.label).toLowerCase().includes(w)));
     popup.replaceChildren();active=-1;
     if(!items.length){const empty=document.createElement('div');empty.className='picker-empty';empty.textContent=freeText?'Type a new value or choose another suggestion.':'No matching activities. Add one from Activities.';popup.append(empty);}
-    items.forEach((item,i)=>{const row=document.createElement('div');row.role='option';row.id=`${id}-${i}`;row.title=item.label;row.setAttribute('aria-selected','false');const label=document.createElement('span');label.textContent=item.label;const hours=document.createElement('small');hours.textContent=`${item.hours.toLocaleString('en-US',{maximumFractionDigits:2})} h`;row.append(label,hours);row.addEventListener('pointerdown',e=>{e.preventDefault();select(i);});popup.append(row);});
+    items.forEach((item,i)=>{const row=document.createElement('div');row.role='option';row.id=`${id}-${i}`;row.title=item.label;row.setAttribute('aria-selected','false');const label=document.createElement('span');if(item.activity)renderActivityLabel(label,item.activity);else label.textContent=item.label;const hours=document.createElement('small');hours.textContent=`${item.hours.toLocaleString('en-US',{maximumFractionDigits:2})} h`;row.append(label,hours);row.addEventListener('pointerdown',e=>{e.preventDefault();select(i);});popup.append(row);});
     popup.hidden=false;input.setAttribute('aria-expanded','true');position();
   }
   input.addEventListener('focus',()=>{query='';show();});
