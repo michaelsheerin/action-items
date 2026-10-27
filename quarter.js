@@ -1,5 +1,5 @@
-import {quarterProgress,fiscalQuarter,activityLabel,formatHours,WORK_ACCOUNTS} from './work-core.js?v=13';
-import {installColumnSizing} from './columns.js?v=13';
+import {quarterProgress,fiscalQuarter,activityLabel,formatHours,WORK_ACCOUNTS} from './work-core.js?v=15';
+import {installColumnSizing} from './columns.js?v=15';
 
 const node=(tag,text,className)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(className)e.className=className;return e;};
 const shortDate=iso=>new Date(`${iso}T12:00:00`).toLocaleDateString('en-US',{month:'short',day:'numeric'});
