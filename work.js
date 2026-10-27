@@ -38,11 +38,19 @@ function activity(id){return data.activities.find(a=>a.id===id);}
 function replaceRecord(key,value){const i=data[key].findIndex(e=>e.id===value.id);if(i<0)data[key].push(value);else data[key][i]=value;}
 function status(){const e=$('work-save'),invalid=$('work-table').querySelector('[aria-invalid="true"]');e.textContent=invalid?'Correct invalid hours':pending?'Saving…':failed.size?'Changes need saving':'Saved';e.className=`save-state ${invalid?'failed':pending?'saving':failed.size?'failed':'saved'}`;}
 function error(message){$('work-error-text').textContent=message;$('work-error').hidden=false;}
-function toast(message){$('work-toast').textContent=message;$('work-toast').hidden=false;setTimeout(()=>{$('work-toast').hidden=true;},6000);}
+let toastTimer;
+function toast(message,undo){const box=$('work-toast');clearTimeout(toastTimer);box.replaceChildren(node('span',message));box.hidden=false;if(undo){const button=node('button','Undo','toast-undo');button.type='button';button.onclick=async()=>{button.disabled=true;await undo();if(box.contains(button))box.hidden=true;};box.append(button);}toastTimer=setTimeout(()=>{box.hidden=true;},undo?15000:6000);}
 async function persist(key,value){
   const token=`${key}:${value.id}`;failed.set(token,{key,value});pending++;status();
   try{await store.put(key,value);if(failed.get(token)?.value===value)failed.delete(token);if(!failed.size)$('work-error').hidden=true;channel?.postMessage({key,id:value.id});return true;}
   catch(e){error(`The edit is still on screen but has not saved. ${e.message} Retry save or download a backup.`);return false;}
+  finally{pending--;status();}
+}
+async function persistHours(records){
+  if(!records.length)return true;
+  for(const value of records)failed.set(`entries:${value.id}`,{key:'entries',value});pending++;status();
+  try{await store.import({activities:[],entries:records,historical:[]},true);for(const value of records)if(failed.get(`entries:${value.id}`)?.value===value)failed.delete(`entries:${value.id}`);if(!failed.size)$('work-error').hidden=true;channel?.postMessage({hours:true});return true;}
+  catch(e){error(`The hours change has not saved. ${e.message} Retry save or download a backup.`);return false;}
   finally{pending--;status();}
 }
 async function saveSlots(){const id=`rows:${days[0]}`, value=Object.fromEntries(Object.entries(rowSlots).map(([a,s])=>[a,[...s]]));try{await Promise.all([store.setting(id,value),store.setting(`hidden-activities:${days[0]}`,[...hiddenActivities])]);}catch(e){error(`Hours are saved separately. Row preferences did not save. ${e.message}`);}}
@@ -108,10 +116,20 @@ function populateHours(v){
 function makeHoursRow(account,index,body){
   const tr=node('tr',undefined,'hours-record'),selectorCell=node('td',undefined,'activity-picker-cell'),selector=node('input');selector.type='text';selector.placeholder='Choose activity…';selector.className='activity-selector';selector.dataset.field='activity';selector.setAttribute('aria-label',`Activity, ${account}, row ${index+1}`);selectorCell.append(selector);tr.append(selectorCell);
   const stats=['total','quarter','week'].map(field=>{const td=node('td','','numeric activity-stat');td.dataset.field=field;return td;});tr.append(...stats.slice(0,2));
-  const display=node('span',undefined,'selected-activity-label'),clear=node('button','×','clear-activity');display.setAttribute('aria-hidden','true');clear.type='button';clear.setAttribute('aria-label',`Clear activity selection, ${account}, row ${index+1}`);clear.title='Clear selection. Logged hours stay saved.';selectorCell.append(display,clear);
+  const display=node('span',undefined,'selected-activity-label'),clear=node('button','×','clear-activity');display.setAttribute('aria-hidden','true');clear.type='button';clear.setAttribute('aria-label',`Clear activity and this week's hours, ${account}, row ${index+1}`);clear.title='Clear activity and all hours in the displayed week.';selectorCell.append(display,clear);
   const v={tr,selector,selectorCell,display,clear,stats,inputs:[],account,index,id:rowSlots[account][index]||''};views.push(v);
   clear.addEventListener('pointerdown',event=>event.preventDefault());
-  clear.onclick=()=>{const old=v.id;if(!old)return;hiddenActivities.add(old);v.id='';rowSlots[account][index]='';populateHours(v);void saveSlots();selector.focus();if(data.entries.some(e=>e.activityId===old&&days.includes(e.date)&&e.hours>0))toast('Selection cleared. Logged hours stay saved and included in totals.');};
+  clear.onclick=()=>{
+    const old=v.id;if(!old)return;const week=days[0],originals=data.entries.filter(e=>e.activityId===old&&days.includes(e.date)&&e.hours>0),stamp=new Date().toISOString();
+    const cleared=originals.map(e=>({...e,hours:0,updatedAt:stamp}));for(const entry of cleared)replaceRecord('entries',entry);
+    hiddenActivities.add(old);v.id='';rowSlots[account][index]='';populateHours(v);void persistHours(cleared);void saveSlots();selector.focus();
+    if(originals.length)toast(`Activity cleared. ${formatHours(originals.reduce((sum,e)=>sum+units(e.hours),0)/100)} hours removed from this week.`,async()=>{
+      const restored=originals.filter(e=>{const current=data.entries.find(row=>row.id===e.id);return current?.hours===0&&current.updatedAt===stamp;}).map(e=>({...e,updatedAt:new Date().toISOString()}));
+      for(const entry of restored)replaceRecord('entries',entry);
+      if(week===days[0]&&views.includes(v)&&!v.id&&!rowSlots[account].includes(old)){v.id=old;rowSlots[account][index]=old;hiddenActivities.delete(old);void saveSlots();}
+      for(const view of views)if(view.id===old)populateHours(view);updateTotals();await persistHours(restored);
+    });
+  };
   for(let i=0;i<7;i++){
     const td=node('td',undefined,'hours-entry-cell'),input=node('input');input.type='text';input.inputMode='decimal';input.autocomplete='off';input.className='hour-input';input.dataset.day=i;input.dataset.field=['mon','tue','wed','thu','fri','sat','sun'][i];
     input.addEventListener('input',()=>{
