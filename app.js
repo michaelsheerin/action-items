@@ -1,4 +1,4 @@
-import {ACCOUNTS, OWNER, STATUSES, FIELDS, localDay, weekBounds, sectionFor, compareTasks, matches, categoryOptions, safeURL, newTask, parseImport, csvExport, cellIsBold, toggledBoldFields, ticketText, ticketInputPatch, linkPatch} from './core.js?v=15';
+import {ACCOUNTS, OWNER, STATUSES, FIELDS, localDay, weekBounds, sectionFor, compareTasks, matches, categoryOptions, safeURL, newTask, parseImport, csvExport, cellIsBold, toggledBoldFields, ticketText, ticketInputPatch, linkPatch} from './core.js?v=16';
 import {openStore} from './store.js?v=15';
 import {installColumnSizing} from './columns.js?v=15';
 import {inlineCompletion, reconcileChildren, installGridKeys} from './interactions.js?v=7';
@@ -165,17 +165,18 @@ function autoSizeMany(controls) {
   visible.forEach((control,index)=>{control.style.height=`${Math.min(160,heights[index])}px`;control.style.overflowY=heights[index]>160?'auto':'hidden';});
 }
 function updateRowAppearance(row, task) {
-  row.dataset.status = task.status;
+  const pendingDefaults=awaitingActionTitle(task);
+  row.dataset.status = pendingDefaults?'':task.status;
   const today = localDay();
   const due = row.querySelector('[data-field="due"]');
-  const highlightDue = Boolean(task.due && task.due <= today);
-  due?.classList.toggle('overdue-date', Boolean(task.due && task.due < today));
+  const highlightDue = Boolean(!pendingDefaults && task.due && task.due <= today);
+  due?.classList.toggle('overdue-date', Boolean(!pendingDefaults && task.due && task.due < today));
   due?.classList.toggle('due-alert', highlightDue);
   due?.closest('.cell-due')?.classList.toggle('due-alert', highlightDue);
-  if (due) due.title = task.due && task.due < today ? 'Overdue' : task.due === today ? 'Today' : '';
+  if (due) due.title = pendingDefaults?'':task.due && task.due < today ? 'Overdue' : task.due === today ? 'Today' : '';
   const hint = row.querySelector('.due-hint');
-  if (hint) hint.textContent = task.due && task.due < today ? 'Overdue' : task.due === today ? 'Today' : '';
-  row.querySelector('[data-field="status"]')?.setAttribute('data-value', task.status);
+  if (hint) hint.textContent = pendingDefaults?'':task.due && task.due < today ? 'Overdue' : task.due === today ? 'Today' : '';
+  row.querySelector('[data-field="status"]')?.setAttribute('data-value', pendingDefaults?'':task.status);
   for (const control of row.querySelectorAll('[data-field]')) control.classList.toggle('is-bold', cellIsBold(task, control.dataset.field));
 }
 function scheduleRender() {
@@ -197,18 +198,20 @@ function promoteRow(row, task) {
   for (const control of row.querySelectorAll('[data-field]')) control.setAttribute('aria-label', `${labels[control.dataset.field]}, ${task.account}, ${task.title || 'untitled action'}`);
   row.querySelector('.field-title').placeholder = 'Action item…';
 }
+function awaitingActionTitle(task){return task.entryDefaultsPending===true&&!task.title.trim();}
 function inputFor(task, field, draft, bucket) {
   let control;
   if (field === 'account' || field === 'status') {
     control = document.createElement('select');
     const values = field === 'account' ? ACCOUNTS : STATUSES;
+    if(field==='status'){const blank=new Option('','');blank.hidden=true;blank.disabled=true;control.append(blank);}
     for (const value of values) control.append(new Option(value || 'Unspecified', value));
-    control.value = task[field];
+    control.value = field==='status'&&awaitingActionTitle(task)?'':task[field];
   } else if (field === 'done') {
     control = document.createElement('input'); control.type = 'checkbox'; control.checked = task.done;
     control.disabled = draft;
   } else if (field === 'due') {
-    control = document.createElement('input'); control.type = 'date'; control.value = task.due;
+    control = document.createElement('input'); control.type = 'date'; control.value = awaitingActionTitle(task)?'':task.due;
   } else if (field === 'title' || field === 'notes') {
     control = document.createElement('textarea'); control.rows = 1; control.value = task[field];
     control.placeholder = field === 'title' ? draft ? 'Add an action item…' : 'Action item…' : '';
@@ -223,10 +226,12 @@ function inputFor(task, field, draft, bucket) {
   function commitValue(value) {
     const row = control.closest('tr');
     const patch = field === 'ticket' ? ticketInputPatch(task, value) : {[field]: value};
+    if(field==='title'&&value.trim()&&task.entryDefaultsPending)patch.entryDefaultsPending=false;
     if (Object.entries(patch).every(([key, next]) => task[key] === next)) return;
     Object.assign(task, patch);
     const updatedAt = new Date().toISOString(); task.updatedAt = updatedAt;
     promoteRow(row, task);
+    if(patch.entryDefaultsPending===false){row.querySelector('.field-due').value=task.due;row.querySelector('.field-status').value=task.status;}
     // Keep an edited action visible if its date or account moves it into Remaining Items.
     if (sectionFor(task) === 'remaining' && (row.closest('tbody').dataset.bucket === 'week' || field === 'account')) expandedRemaining.add(task.account);
     if (field === 'ticket') updateTicketLink(row, task);
@@ -385,7 +390,7 @@ function updateRow(row, task, draft) {
     const field = control.dataset.field;
     if (field === 'done') { control.checked = task.done; control.disabled = draft; }
     else {
-      const value = field === 'ticket' ? ticketText(task) : task[field];
+      const value = awaitingActionTitle(task)&&['due','status'].includes(field)?'':field === 'ticket' ? ticketText(task) : task[field];
       if (control.value !== value) control.value = value;
     }
     if (field === 'title') control.placeholder = draft ? 'Add an action item…' : 'Action item…';
@@ -403,7 +408,7 @@ function bandRow(title, description, className) {
 }
 function draftFor(account, section) {
   const key = `${section}:${account}`;
-  if (!drafts.has(key)) drafts.set(key, newTask(account));
+  if (!drafts.has(key)) drafts.set(key, {...newTask(account),entryDefaultsPending:true});
   return drafts.get(key);
 }
 function remainingOpen(account) {
