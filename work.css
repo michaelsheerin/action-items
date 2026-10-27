@@ -160,3 +160,18 @@ body[data-view="hours"] .work-grid-wrap { flex: none; min-height: 210px; max-hei
 .quarter-target-formula { margin-left: auto; color: #7d8794; font-size: 11px; }
 @media(max-width:700px) { .quarter-target-formula { margin-left: 0; flex-basis: 100%; }.quarter-period { font-size: 10px; }.quarter-metrics { gap: 10px 20px; } }
 @media(max-width:500px) { .quarter-section { scroll-margin-top: 112px; }body[data-view="hours"] .work-grid-wrap { max-height: calc(100dvh - 235px); } }
+/* Keep the entry sheet inside the viewport, including saved column proportions. */
+.hours-grid { min-width: 0; width: 100%; }
+body[data-view="hours"] .work-main { min-width: 0; }
+.hours-grid thead th:nth-child(4),.hours-grid .hours-record td:nth-child(4),.hours-account-total td:nth-child(2),.hours-grand-total td:nth-child(2) { border-left: 2px solid #687d98; }
+.activity-picker-cell.has-activity .activity-selector { padding-right: 46px; }
+.selected-activity-label { position: absolute; inset: 0 47px 0 9px; display: flex; align-items: center; pointer-events: none; overflow: hidden; }
+.selected-activity-label { display: block; padding-top: 8px; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; }
+.has-activity:not(:focus-within) .activity-selector { color: transparent; }
+.activity-picker-cell:focus-within .selected-activity-label { display: none; }
+.activity-label-opp { font-size: .92em; font-weight: 700; font-style: italic; }
+.selected-activity-label strong,.work-options strong { font-weight: 700; }
+.clear-activity { position: absolute; top: 3px; right: 22px; width: 23px; height: 25px; padding: 0; border: 0; background: transparent; color: #748194; font-size: 18px; line-height: 1; }
+.clear-activity:hover { background: #e9edf3; color: #243a55; }
+.hours-grid .hour-input { padding-left: 3px; padding-right: 6px; }
+.hours-grid thead th,.hours-grid .activity-stat { overflow: hidden; text-overflow: ellipsis; }
